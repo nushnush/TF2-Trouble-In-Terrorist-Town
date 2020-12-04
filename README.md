@@ -18,8 +18,8 @@ Information taken from the [Wiki](https://trouble-in-terrorist-town.fandom.com/w
 - Round timers to your likings.
 
 ## Dependencies ##
-###### SourceMod 1.10 ######
-###### [TF2Items](https://forums.alliedmods.net/showthread.php?p=1050170) ###### 
+- SourceMod 1.10
+- [TF2Items](https://forums.alliedmods.net/showthread.php?p=1050170)
 
 ## Configuration ##
 Currently there is one configuration file to edit:
