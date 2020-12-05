@@ -9,6 +9,11 @@ Information taken from the [Wiki](https://trouble-in-terrorist-town.fandom.com/w
 
 **This gamemode is still in an early stage of development.**
 
+## Links ##
+
+- [AlliedModders Thread](https://forums.alliedmods.net/showthread.php?t=328997)
+- [TTT Wikipedia](https://trouble-in-terrorist-town.fandom.com/wiki/Trouble_in_Terrorist_Town_Wiki)
+
 ## Features ##
 
 - Randomize system that selects players to become Traitors and Detectives.
@@ -20,6 +25,7 @@ Information taken from the [Wiki](https://trouble-in-terrorist-town.fandom.com/w
 ## Dependencies ##
 - SourceMod 1.10
 - [TF2Items](https://forums.alliedmods.net/showthread.php?p=1050170)
+- [MoreColors.inc](https://forums.alliedmods.net/showthread.php?t=185016)
 
 ## Configuration ##
 Currently there is one configuration file to edit:
