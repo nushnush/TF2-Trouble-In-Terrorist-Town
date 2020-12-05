@@ -223,7 +223,7 @@ methodmap TTTPlayer
 		this.ShowRoleMenu();
 		this.credits = g_Cvar_CreditStart.IntValue;
 
-		if(this.role == DETECTIVE)
+		if (this.role == DETECTIVE)
 		{
 			TF2_AddCondition(client, TFCond_CritCola, TFCondDuration_Infinite);
 		}
@@ -239,9 +239,6 @@ methodmap TTTPlayer
 
 char g_sDoorList[][] = { "func_door", "func_door_rotating", "func_movelinear" };
 char g_sRoles[][] = { "NOROLE", "{lime}innocent{default}", "{fullred}traitor{default}", "{dodgerblue}detective{default}" };
-
-int traitorCount;
-int innoCount;
 
 bool roundStarted;
 
@@ -309,8 +306,6 @@ public void OnConfigsExecuted()
 public void OnMapStart()
 {
 	roundStarted = false;
-	traitorCount = 0;
-	innoCount = 0;
 	
 	FF(false);
 
@@ -345,40 +340,29 @@ public void OnClientPutInServer(int client)
 	TTTPlayer(client).karma = 100;
 }
 
-public void OnClientDisconnect(int client)
+public void OnClientDisconnect_Post(int client)
 {
-	if(!roundStarted)
+	if (!roundStarted)
 		return;
 	
-	TTTPlayer player = TTTPlayer(client);
+	int traitorCount = GetRoleCount(TRAITOR);
+	int innoCount = GetRoleCount(INNOCENT);
 
-	if (player.role == TRAITOR)
+	if (traitorCount == 0 && innoCount > 0)
 	{
-		traitorCount--;
-
-		if (traitorCount == 0)
-		{
-			CPrintToChatAll("%s No traitors left.", TAG);
-			ForceTeamWin();
-		}
-	}	
-	else if (player.role == INNOCENT)
-	{
-		innoCount--;
-
-		if (innoCount == 0)
-		{
-			CPrintToChatAll("%s No innocents left.", TAG);
-			ForceTeamWin();
-		}
+		CPrintToChatAll("%s Last traitor has disconnected, innocents won!", TAG);
+		ForceTeamWin();
 	}
-
-	player.Reset();
+	else if (innoCount == 0 && traitorCount > 0)
+	{
+		CPrintToChatAll("%s Last innocent has disconnected, traitors won!", TAG);
+		ForceTeamWin();
+	}
 }
 
 public void TF2_OnConditionAdded(int client, TFCond condition)
 {
-	if(condition == TFCond_Zoomed)
+	if (condition == TFCond_Zoomed)
 	{
 		SetEntPropFloat(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), Prop_Send, "m_flChargedDamage", 150.0);
 	}
@@ -413,7 +397,7 @@ Action Listener_JoinClass(int client, const char[] command, int args)
 	char arg[32];
 	GetCmdArg(1, arg, sizeof(arg));
 
-	if(!StrEqual(arg, "soldier", false))
+	if (!StrEqual(arg, "soldier", false))
 	{
 		TF2_SetPlayerClass(client, TFClass_Soldier);
 		return Plugin_Handled;
@@ -424,13 +408,6 @@ Action Listener_JoinClass(int client, const char[] command, int args)
 
 /* Cmds
 ==================================================================================================== */
-
-public Action Cmd_Reset(int client, int args)
-{
-	TTTPlayer(client).role = TRAITOR;
-	TTTPlayer(client).Setup();
-	return Plugin_Handled;
-}
 
 public Action Cmd_ReloadConfigs(int client, int args)
 {
@@ -467,31 +444,29 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 		return Plugin_Continue;
 
 	TTTPlayer player = TTTPlayer(victim);
-	
-	if (player.role == TRAITOR)
-	{
+
+	int traitorCount = GetRoleCount(TRAITOR);
+	int innoCount = GetRoleCount(INNOCENT);
+
+	if(player.role == INNOCENT)
+		innoCount--;
+	else if(player.role == TRAITOR)
 		traitorCount--;
 
-		if (traitorCount <= 0)
-		{
-			CPrintToChatAll("%s All the traitors have died, and the innocents won!", TAG);
-			ForceTeamWin();
-		}
-	}
-	else if (player.role == INNOCENT)
+	if (traitorCount == 0 && innoCount > 0)
 	{
-		innoCount--;
-
-		if (innoCount <= 0)
-		{
-			CPrintToChatAll("%s The innocents have died, and the traitors won!", TAG);
-			ForceTeamWin();
-		}
+		CPrintToChatAll("%s All the traitors have died, and the innocents won!", TAG);
+		ForceTeamWin();
+	}
+	else if (innoCount == 0 && traitorCount > 0)
+	{
+		CPrintToChatAll("%s The innocents have died, and the traitors won!", TAG);
+		ForceTeamWin();
 	}
 
 	CreateTimer(0.0, CreateRagdoll, player);
 
-	if(!IsAdmin(victim))
+	if (!IsAdmin(victim))
 		SetClientListeningFlags(victim, VOICE_MUTED);
 	
 	if (!IsValidClient(attacker) || attacker == victim)
@@ -502,13 +477,13 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	player.killCount++;
 	player.credits += g_Cvar_KillCredits.IntValue;
 
-	if(player.role != TRAITOR)
+	if (player.role != TRAITOR)
 	{
-		if(victimRole != TRAITOR)
+		if (victimRole != TRAITOR)
 		{
 			player.karma -= 10;
 
-			if(player.karma < 10)
+			if (player.karma < 10)
 			{
 				player.karma = 10;
 			}	
@@ -517,7 +492,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 		{
 			player.karma += 10;
 
-			if(player.karma > 110)
+			if (player.karma > 110)
 			{
 				player.karma = 110;
 			}	
@@ -547,7 +522,6 @@ public void Event_RoundEnd(Event event, char[] name, bool dontBroadcast)
 		}
 	}
 	
-	traitorCount = 0;
 	roundStarted = false;
 	FF(false);
 }
@@ -593,11 +567,11 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 		}
 		return Plugin_Handled;
 	}
-	else if(StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role == TRAITOR)
+	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role == TRAITOR)
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsValidClient(i) && TTTPlayer(client).role == TRAITOR)
+			if (IsValidClient(i) && TTTPlayer(i).role == TRAITOR)
 			{
 				CPrintToChat(i, "(TRAITOR) {red}%N {default}: %s", client, message);
 			}
@@ -632,7 +606,7 @@ public Action Timer_Hud(Handle timer)
 				char traitors[256];
 				for (int j = 1; j <= MaxClients; j++)
 				{
-					if(IsValidClient(j) && TTTPlayer(j).role == TRAITOR && j != i)
+					if (IsValidClient(j) && TTTPlayer(j).role == TRAITOR && j != i)
 					{
 						Format(traitors, sizeof(traitors), "%s\n%N", traitors, j);
 					}
@@ -665,13 +639,13 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 	if (buttons & IN_RELOAD)
 	{
 		int target = GetClientAimTarget(client, false);
-		if(target == -1) 
+		if (target == -1) 
 			return Plugin_Continue;
 
 		char name[64];
 		GetEntPropString(target, Prop_Data, "m_iName", name, sizeof(name));
 
-		if(StrEqual(name, "deadbody") || StrEqual(name, "fakebody"))
+		if (StrEqual(name, "deadbody") || StrEqual(name, "fakebody"))
 		{
 			float now = GetGameTime();
 			if (now - g_fLastMessage[client] > 1) // Prevent spam
@@ -681,7 +655,7 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 				g_fLastMessage[client] = now;
 			}
 		}
-		else if(StrEqual(name, "explosivebody"))
+		else if (StrEqual(name, "explosivebody"))
 		{
 			float origin[3];
 			GetEntPropVector(target, Prop_Send, "m_vecOrigin", origin); // Position of the body
@@ -704,7 +678,7 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 	else 
 	{
 		TTTPlayer player = TTTPlayer(client);
-		if(buttons & IN_SCORE && player.role == TRAITOR)
+		if (buttons & IN_SCORE && player.role == TRAITOR)
 		{
 			OpenShop(player);
 		}
@@ -725,7 +699,7 @@ void SpawnRagdoll(const TTTPlayer player, const char[] name)
 {
 	int client = player.index;
 	int BodyRagdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
-	if(IsValidEdict(BodyRagdoll))
+	if (IsValidEdict(BodyRagdoll))
 	{
 		AcceptEntityInput(BodyRagdoll, "kill");
 	}
@@ -770,15 +744,34 @@ bool IsMeleeActive(int client)
 void SetAmmo(int client, int iWeapon, int iAmmo)
 {
 	int iAmmoType = GetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType");
-	if(iAmmoType != -1) SetEntProp(client, Prop_Data, "m_iAmmo", iAmmo, _, iAmmoType);
+	if (iAmmoType != -1) SetEntProp(client, Prop_Data, "m_iAmmo", iAmmo, _, iAmmoType);
 }
 
 /*int GetMaxAmmo(int client, int iWeapon)
 {
 	int iAmmoType = GetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType");
-	if(iAmmoType != -1) return GetEntProp(client, Prop_Data, "m_iAmmo", _, iAmmoType);
+	if (iAmmoType != -1) return GetEntProp(client, Prop_Data, "m_iAmmo", _, iAmmoType);
 	return -1;
 }*/
+
+int GetRoleCount(Role role, bool alive = true)
+{
+	int count = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsValidClient(i))
+			continue;
+
+		if (TTTPlayer(i).role != role)
+			continue;
+
+		if(alive && !IsPlayerAlive(i))
+			continue;
+
+		count++;
+	}
+	return count;
+}
 
 void ForceTeamWin()
 {
@@ -796,3 +789,15 @@ void ForceTeamWin()
 }
 
 public int RoleMenu(Menu menu, MenuAction action, int param1, int param2) {  }
+
+/* Debug output
+==================================================================================================== */
+
+/*void DebugText(const char[] text, any ...) 
+{
+	int len = strlen(text) + 255;
+	char[] format = new char[len];
+	VFormat(format, len, text, 2);
+	CPrintToChatAll("{collectors}[TTT Debug] {white}%s", format);
+	PrintToServer("[TTT Debug] %s", format);
+}*/

@@ -73,7 +73,6 @@ public void StartTTT()
 				CPrintToChat(i, "%s {community}You are an %s.", TAG, g_sRoles[INNOCENT]);
 				CPrintToChat(i, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
 				player.role = INNOCENT;
-				innoCount++;
 			}
 
 			player.Setup();
@@ -133,7 +132,6 @@ public void StartTTT()
 public void AssignTraitors()
 {
 	int required = GetClientCount() / g_Cvar_TraitorRatio.IntValue;
-	traitorCount = required;
 
 	while(required > 0)
 	{
@@ -143,7 +141,7 @@ public void AssignTraitors()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = TRAITOR;
 			player.credits = 3;
-			CPrintToChat(random, "%s {community}You are a {fullred}Traitor{community}.", TAG);
+			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
 			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 		}
 		required--;
@@ -162,8 +160,8 @@ public void AssignDetectives()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = DETECTIVE;
 			player.credits = 3;
-			CPrintToChat(random, "%s {community}You are a {fullred}Traitor{community}.", TAG);
-			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
+			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[DETECTIVE]);
+			CPrintToChat(random, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
 		}
 		required--;
 	}
