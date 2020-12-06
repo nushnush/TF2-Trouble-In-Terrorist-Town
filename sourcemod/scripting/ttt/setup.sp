@@ -9,8 +9,14 @@ public void FF(bool status)
 
 public void OpenDoors()
 {
-	int ent;
-	for (int i = 0; i < sizeof(g_sDoorList); i++)
+	int ent = MaxClients + 1;
+	while ((ent = FindEntityByClassname(ent, "func_door")) != -1)
+	{
+		AcceptEntityInput(ent, "Unlock");
+		AcceptEntityInput(ent, "Open");
+	}
+	
+	/*for (int i = 0; i < sizeof(g_sDoorList); i++)
 	{
 		ent = -1;
 		while ((ent = FindEntityByClassname(ent, g_sDoorList[i])) != -1)
@@ -18,7 +24,7 @@ public void OpenDoors()
 			AcceptEntityInput(ent, "Unlock");
 			AcceptEntityInput(ent, "Open");
 		}
-	}
+	}*/
 }
 
 public void MakeRoundTimer()
@@ -81,43 +87,43 @@ public void StartTTT()
 
 	roundStarted = true;
 
-	int ent = -1;
+	int ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "func_respawnroomvisualizer")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 
-	ent = -1;
+	ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "team_control_point")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 
-	ent = -1;
+	ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "item_teamflag")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 
-	ent = -1;
+	ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "func_capturezone")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 
-	ent = -1;
+	ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "func_regenerate")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 
-	ent = -1;
+	ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "trigger_capture_area")) != -1)
 	{
 		AcceptEntityInput(ent, "Disable");
 	}
 	
-	ent = FindEntityByClassname(-1, "tf_gamerules");
+	ent = FindEntityByClassname(MaxClients + 1, "tf_gamerules");
 	if (ent != -1)
 	{
 		SetVariantFloat(999.9);
@@ -141,6 +147,7 @@ public void AssignTraitors()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = TRAITOR;
 			player.credits = 3;
+			player.roundsPast = 0;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
 			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 		}
@@ -160,6 +167,7 @@ public void AssignDetectives()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = DETECTIVE;
 			player.credits = 3;
+			player.roundsPast = 0;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[DETECTIVE]);
 			CPrintToChat(random, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
 		}
@@ -169,12 +177,17 @@ public void AssignDetectives()
 
 public int GetRandomPlayer()  
 {  
-	int[] clients = new int[MaxClients];  
+	int[] clients = new int[MaxClients];
 	int clientCount;
 	for (int i = MaxClients; i; --i)  
 	{
 		if (IsValidClient(i) && TTTPlayer(i).role == NOROLE)
-			clients[clientCount++] = i;  
+		{
+			TTTPlayer player = TTTPlayer(i);
+			if(player.role == NOROLE && player.roundsPast != 1)
+				clients[clientCount++] = i;
+		}
+			
 	}
 	return (clientCount == 0) ? -1 : clients[GetRandomInt(0, clientCount - 1)];  
 }

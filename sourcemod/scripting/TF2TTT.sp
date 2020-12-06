@@ -14,8 +14,6 @@
 
 #pragma newdecls required
 
-StringMap hMap[MAXPLAYERS+1];
-
 ConVar g_Cvar_SetupTime;
 ConVar g_Cvar_RoundTime;
 ConVar g_Cvar_TraitorRatio;
@@ -32,242 +30,26 @@ enum Role
 	DETECTIVE
 }
 
-methodmap TTTPlayer
-{
-	public TTTPlayer(const int index)
-	{
-		return view_as< TTTPlayer >(index);
-	}
-
-	property int index 
-	{
-		public get()			{ return view_as< int >(this); }
-	}
-
-	property StringMap hMap
-	{
-		public get()			{ return hMap[this.index]; }
-	}
-
-	public any GetProp(const char[] key)
-	{
-		any val; 
-		this.hMap.GetValue(key, val);
-		return val;
-	}
-	public void SetProp(const char[] key, any val)
-	{
-		this.hMap.SetValue(key, val);
-	}
-	public float GetPropFloat(const char[] key)
-	{
-		float val; 
-		this.hMap.GetValue(key, val);
-		return val;
-	}
-	public void SetPropFloat(const char[] key, float val)
-	{
-		this.hMap.SetValue(key, val);
-	}
-	/*public int GetPropString(const char[] key, char[] buffer, int maxlen)
-	{
-		return this.hMap.GetString(key, buffer, maxlen);
-	}
-	public void SetPropString(const char[] key, const char[] val)
-	{
-		this.hMap.SetString(key, val);
-	}
-	public void GetPropArray(const char[] key, any[] buffer, int maxlen)
-	{
-		this.hMap.GetArray(key, buffer, maxlen);
-	}
-	public void SetPropArray(const char[] key, const any[] val, int maxlen)
-	{
-		this.hMap.SetArray(key, val, maxlen);
-	}*/
-
-	property Role role
-	{
-		public get() 				{ return this.GetProp("role"); }
-		public set( const Role i )	{ this.SetProp("role", i); }
-	}
-
-	property int killCount
-	{
-		public get() 				{ return this.GetProp("killCount"); }
-		public set( const int i )	{ this.SetProp("killCount", i); }
-	}
-
-	property int credits
-	{
-		public get() 				{ return this.GetProp("credits"); }
-		public set( const int i )	{ this.SetProp("credits", i); }
-	}
-
-	property int karma
-	{
-		public get() 				{ return this.GetProp("karma"); }
-		public set( const int i )	{ this.SetProp("karma", i); }
-	}
-
-	property float deathTime
-	{
-		public get() 				{ return this.GetPropFloat("deathTime"); }
-		public set( const float i )	{ this.SetPropFloat("deathTime", i); }
-	}
-
-	public int SpawnWeapon(char[] name, int index, int level, int qual, const char[] att = NULL_STRING)
-	{
-		Handle hWeapon = TF2Items_CreateItem(OVERRIDE_ALL);
-		int client = this.index;
-
-		TF2Items_SetClassname(hWeapon, name);
-		TF2Items_SetItemIndex(hWeapon, index);
-		TF2Items_SetLevel(hWeapon, level);
-		TF2Items_SetQuality(hWeapon, qual);
-		
-		char atts[32][32];
-		int count = ExplodeString(att, " ; ", atts, 32, 32);
-		if (att[0]) 
-		{
-			TF2Items_SetNumAttributes(hWeapon, count / 2);
-			int i2 = 0;
-			for (int i = 0; i < count; i += 2) 
-			{
-				TF2Items_SetAttribute(hWeapon, i2, StringToInt(atts[i]), StringToFloat(atts[i+1]));
-				i2++;
-			}
-		}
-		else TF2Items_SetNumAttributes(hWeapon, 0);
-
-		int entity = TF2Items_GiveNamedItem(client, hWeapon);
-		SetEntProp(entity, Prop_Send, "m_bValidatedAttachedEntity", true);
-		delete hWeapon;
-		EquipPlayerWeapon(client, entity);
-		return entity;
-	}
-
-	public void GiveInitialWeapon()
-	{
-		int client = this.index;
-		TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
-		TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
-		int wep;
-		switch(TF2_GetPlayerClass(client))
-		{
-			case TFClass_Soldier:
-			{
-				wep = this.SpawnWeapon("tf_weapon_shotgun_soldier", 10, 1, 0);
-			}
-			case TFClass_Pyro:
-			{
-				wep = this.SpawnWeapon("tf_weapon_shotgun_pyro", 12, 1, 0);
-			}
-			case TFClass_Heavy:
-			{
-				wep = this.SpawnWeapon("tf_weapon_shotgun_hwg", 11, 1, 0);
-			}
-			default: // because bots fuck up things
-			{
-				wep = this.SpawnWeapon("tf_weapon_shotgun_soldier", 10, 1, 0);
-			}
-		}
-		SetAmmo(client, wep, 16);
-	}
-
-	public void ShowRoleMenu()
-	{
-		Panel panel = new Panel();
-		panel.SetTitle("[TF2] Trouble In Terrorist Town:");
-		
-		if (this.role == INNOCENT)
-		{
-			panel.DrawItem("You are an innocent.");
-			panel.DrawItem("Survive the to win the round!");
-			panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
-		}
-		else if (this.role == TRAITOR)
-		{
-			panel.DrawItem("You are A TRAITOR.");
-			panel.DrawItem("Kill all the innocents without dying!");
-			panel.DrawItem("You can see who your fellow traitors are.");
-			panel.DrawItem("Open the Secoreboard to view the buy menu");
-		}
-		else if (this.role == DETECTIVE)
-		{
-			panel.DrawItem("You are A DETECTIVE!");
-			panel.DrawItem("Kill all the traitors without dying!");
-			panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
-		}
-		else
-		{
-			panel.DrawItem("You don't have a role.");
-			panel.DrawItem("Wait for the current round to end!");
-		}
-
-		panel.DrawItem("Press Reload to inspect a body.");
-		panel.Send(this.index, RoleMenu, 15);
-		delete panel;
-	}
-
-	public void Setup()
-	{
-		int client = this.index;
-		if (IsPlayerAlive(client))
-		{
-			int EntProp = GetEntProp(client, Prop_Send, "m_lifeState");
-			SetEntProp(client, Prop_Send, "m_lifeState", 2);
-			TF2_ChangeClientTeam(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
-			SetEntProp(client, Prop_Send, "m_lifeState", EntProp);
-		}
-		else
-		{
-			TF2_ChangeClientTeam(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
-			TF2_RespawnPlayer(client);
-		}
-				
-		TF2_RegeneratePlayer(client);
-		this.GiveInitialWeapon();
-		this.ShowRoleMenu();
-		this.credits = g_Cvar_CreditStart.IntValue;
-
-		if (this.role == DETECTIVE)
-		{
-			TF2_AddCondition(client, TFCond_CritCola, TFCondDuration_Infinite);
-		}
-	}
-
-	public void Reset()
-	{
-		int karma = this.karma;
-		this.hMap.Clear();
-		this.karma = karma;
-	}
-};
-
-char g_sDoorList[][] = { "func_door", "func_door_rotating", "func_movelinear" };
+//char g_sDoorList[][] = { "func_door", "func_door_rotating", "func_movelinear" };
 char g_sRoles[][] = { "NOROLE", "{lime}innocent{default}", "{fullred}traitor{default}", "{dodgerblue}detective{default}" };
 
 bool roundStarted;
 
-/*float g_fStartSearchTime[MAXPLAYERS + 1];
-float g_fLastSearch[MAXPLAYERS + 1];*/
 float g_fLastMessage[MAXPLAYERS + 1];
-
-//Handle g_hScanTimer[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
 	name = "[TF2] Trouble In Terrorist Town", 
 	author = "yelks", 
 	description = "GMOD:TTT/CSGO:TTT Mod made for tf2", 
-	version = "0.1 Beta", 
+	version = "0.1.3 Beta", 
 	url = "http://www.yelksdev.xyz/"
 };
 
 /* Forwards
 ==================================================================================================== */
 
+#include "ttt/tttplayer.sp"
 #include "ttt/shop.sp"
 #include "ttt/setup.sp"
 
@@ -275,8 +57,6 @@ public void OnPluginStart()
 {
 	AddServerTag("ttt");
 
-	/*g_Cvar_Delay = CreateConVar("ttt_scan_delay", "90", "Delay for detectives to use their scanners.", _, true, 0.0);
-	g_Cvar_Chance = CreateConVar("ttt_fake_chance", "20", "Chances of the scanners to fake results.", _, true, 0.0, true, 100.0);*/
 	g_Cvar_SetupTime = CreateConVar("ttt_setuptime", "30", "Time in seconds to prepare before the ttt starts.", _, true, 5.0);
 	g_Cvar_RoundTime = CreateConVar("ttt_roundtime", "240", "Round duration in seconds", _, true, 10.0, true, 900.0);
 	g_Cvar_TraitorRatio = CreateConVar("ttt_traitor_ratio", "3", "1 Traitor out of every X players in the server", _, true, 2.0);
@@ -318,7 +98,7 @@ public void OnMapStart()
 	
 	FF(false);
 
-	SDKHook(FindEntityByClassname(-1, "tf_player_manager"), SDKHook_ThinkPost, ThinkPost);
+	SDKHook(FindEntityByClassname(MaxClients + 1, "tf_player_manager"), SDKHook_ThinkPost, ThinkPost);
 }
 
 public void ThinkPost(int entity)
@@ -346,6 +126,7 @@ public void OnClientPutInServer(int client)
 	hMap[client] = new StringMap();
 
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKHook(client, SDKHook_GetMaxHealth, OnGetMaxHealth);
 	TTTPlayer(client).karma = 100;
 }
 
@@ -406,7 +187,7 @@ Action Listener_JoinClass(int client, const char[] command, int args)
 	if (roundStarted)
 	{
 		CPrintToChat(client, "%s You cannot change class during the round.", TAG);
-		return Plugin_Continue;
+		return Plugin_Handled;
 	}
 
 	char arg[32];
@@ -459,6 +240,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 		return Plugin_Continue;
 
 	TTTPlayer player = TTTPlayer(victim);
+	Role victimRole = player.role;
 
 	int traitorCount = GetRoleCount(TRAITOR);
 	int innoCount = GetRoleCount(INNOCENT);
@@ -487,7 +269,6 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	if (!IsValidClient(attacker) || attacker == victim)
 		return Plugin_Handled;
 
-	Role victimRole = player.role;
 	player = TTTPlayer(attacker);
 	player.killCount++;
 	player.credits += g_Cvar_KillCredits.IntValue;
@@ -541,34 +322,6 @@ public void Event_RoundEnd(Event event, char[] name, bool dontBroadcast)
 	FF(false);
 }
 
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-	if (roundStarted && IsValidClient(victim) && IsValidClient(attacker) && victim != attacker)
-	{
-		TTTPlayer pAttacker = TTTPlayer(attacker);
-		TTTPlayer pVictim = TTTPlayer(victim);
-
-		if (pAttacker.role == TRAITOR && IsMeleeActive(attacker) && pAttacker.killCount >= 3)
-		{
-			pAttacker.killCount -= 3;
-			CPrintToChat(attacker, "%s You just used your INSTANT KILL.", TAG);
-			damage = 9999.0;
-			return Plugin_Changed;
-		}
-		
-		if (/*g_hScanTimer[attacker] != null ||*/ (pVictim.role == DETECTIVE && pAttacker.role == DETECTIVE))
-		{
-			damage = 0.0;
-			return Plugin_Changed;
-		}	
-
-		damage *= pAttacker.karma / 100.0;
-		return Plugin_Changed;
-	}
-	
-	return Plugin_Continue;
-}
-
 public Action OnClientSayCommand(int client, const char[] command, const char[] message)
 {
 	if (!IsPlayerAlive(client) && !IsAdmin(client))
@@ -591,6 +344,10 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 				CPrintToChat(i, "(TRAITOR) {red}%N {default}: %s", client, message);
 			}
 		}
+		return Plugin_Handled;
+	}
+	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role != TRAITOR)
+	{
 		return Plugin_Handled;
 	}
 	
@@ -641,6 +398,46 @@ public Action Timer_Hud(Handle timer)
 	}
 	
 	CloseHandle(hHudRole);
+}
+
+/* SDK Hooks
+==================================================================================================== */
+
+public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	if (roundStarted && IsValidClient(victim) && IsValidClient(attacker) && victim != attacker)
+	{
+		TTTPlayer pAttacker = TTTPlayer(attacker);
+		TTTPlayer pVictim = TTTPlayer(victim);
+
+		if (pAttacker.role == TRAITOR && IsMeleeActive(attacker) && pAttacker.killCount >= 3)
+		{
+			pAttacker.killCount -= 3;
+			CPrintToChat(attacker, "%s You just used your INSTANT KILL.", TAG);
+			damage = 9999.0;
+			return Plugin_Changed;
+		}
+		
+		if (/*g_hScanTimer[attacker] != null ||*/ (pVictim.role == DETECTIVE && pAttacker.role == DETECTIVE))
+		{
+			damage = 0.0;
+			return Plugin_Changed;
+		}	
+
+		damage *= pAttacker.karma / 100.0;
+		return Plugin_Changed;
+	}
+	
+	return Plugin_Continue;
+}
+
+public Action OnGetMaxHealth(int client, int &maxhealth)
+{
+	if(!IsValidClient(client)) 
+		return Plugin_Continue;
+
+	maxhealth = 200;
+	return Plugin_Changed;
 }
 
 /* Scanner & Shop
@@ -795,7 +592,7 @@ int GetRoleCount(Role role, bool alive = true)
 
 void ForceTeamWin()
 {
-	int entity = FindEntityByClassname(-1, "team_control_point_master");
+	int entity = FindEntityByClassname(MaxClients + 1, "team_control_point_master");
 	
 	if (entity == -1)
 	{
