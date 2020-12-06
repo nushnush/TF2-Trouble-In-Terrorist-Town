@@ -116,22 +116,12 @@ methodmap TTTPlayer
 		public set( const float i )	{ this.SetPropFloat("deathTime", i); }
 	}
 
-	public int SpawnWeapon(const char[] name, int index, int level, int qual, const char[] att = NULL_STRING)
+	public int SpawnWeapon(char[] name, int index, int level, int qual, const char[] att = NULL_STRING)
 	{
 		Handle hWeapon = TF2Items_CreateItem(OVERRIDE_ALL);
 		int client = this.index;
-		char weaponClassname[64];
-		strcopy(weaponClassname, sizeof(weaponClassname), name);
-		if (StrContains(weaponClassname, "tf_weapon_shotgun") > -1)
-		{
-			switch (TF2_GetPlayerClass(client))
-			{
-				case TFClass_Heavy: strcopy(weaponClassname, sizeof(weaponClassname), "tf_weapon_shotgun_hwg");
-				case TFClass_Soldier: strcopy(weaponClassname, sizeof(weaponClassname), "tf_weapon_shotgun_soldier");
-				case TFClass_Pyro: strcopy(weaponClassname, sizeof(weaponClassname), "tf_weapon_shotgun_pyro");
-			}
-		}
-		TF2Items_SetClassname(hWeapon, weaponClassname);
+
+		TF2Items_SetClassname(hWeapon, name);
 		TF2Items_SetItemIndex(hWeapon, index);
 		TF2Items_SetLevel(hWeapon, level);
 		TF2Items_SetQuality(hWeapon, qual);
@@ -162,7 +152,26 @@ methodmap TTTPlayer
 		int client = this.index;
 		TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
 		TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
-		int wep = this.SpawnWeapon("tf_weapon_shotgun_soldier", 10, 1, 6);
+		int wep;
+		switch(TF2_GetPlayerClass(client))
+		{
+			case TFClass_Soldier:
+			{
+				wep = this.SpawnWeapon("tf_weapon_shotgun_soldier", 10, 1, 0);
+			}
+			case TFClass_Pyro:
+			{
+				wep = this.SpawnWeapon("tf_weapon_shotgun_pyro", 12, 1, 0);
+			}
+			case TFClass_Heavy:
+			{
+				wep = this.SpawnWeapon("tf_weapon_shotgun_hwg", 11, 1, 0);
+			}
+			default: // because bots fuck up things
+			{
+				wep = this.SpawnWeapon("tf_weapon_shotgun_soldier", 10, 1, 0);
+			}
+		}
 		SetAmmo(client, wep, 16);
 	}
 
@@ -217,7 +226,6 @@ methodmap TTTPlayer
 			TF2_RespawnPlayer(client);
 		}
 				
-		TF2_SetPlayerClass(client, TFClass_Soldier);
 		TF2_RegeneratePlayer(client);
 		this.GiveInitialWeapon();
 		this.ShowRoleMenu();
@@ -270,7 +278,7 @@ public void OnPluginStart()
 	/*g_Cvar_Delay = CreateConVar("ttt_scan_delay", "90", "Delay for detectives to use their scanners.", _, true, 0.0);
 	g_Cvar_Chance = CreateConVar("ttt_fake_chance", "20", "Chances of the scanners to fake results.", _, true, 0.0, true, 100.0);*/
 	g_Cvar_SetupTime = CreateConVar("ttt_setuptime", "30", "Time in seconds to prepare before the ttt starts.", _, true, 5.0);
-	g_Cvar_RoundTime = CreateConVar("ttt_roundtime", "240", "Round duration in seconds", _, true, 10.0);
+	g_Cvar_RoundTime = CreateConVar("ttt_roundtime", "240", "Round duration in seconds", _, true, 10.0, true, 900.0);
 	g_Cvar_TraitorRatio = CreateConVar("ttt_traitor_ratio", "3", "1 Traitor out of every X players in the server", _, true, 2.0);
 	g_Cvar_DetectiveRatio = CreateConVar("ttt_detective_ratio", "11", "1 Detective out of every X players in the server", _, true, 3.0);
 	g_Cvar_CreditStart = CreateConVar("ttt_initialcredits", "3", "Initial amount of credits to start with.", _, true, 0.0);
@@ -299,6 +307,7 @@ public void OnPluginStart()
 public void OnConfigsExecuted()
 {
 	FindConVar("mp_autoteambalance").SetInt(0);
+	FindConVar("mp_teams_unbalance_limit").SetInt(0);
 
 	Shop_Refresh();
 }
@@ -394,10 +403,16 @@ Action Listener_JoinClass(int client, const char[] command, int args)
 	if (!IsValidClient(client))
 		return Plugin_Continue;
 
+	if (roundStarted)
+	{
+		CPrintToChat(client, "%s You cannot change class during the round.", TAG);
+		return Plugin_Continue;
+	}
+
 	char arg[32];
 	GetCmdArg(1, arg, sizeof(arg));
 
-	if (!StrEqual(arg, "soldier", false))
+	if (!StrEqual(arg, "soldier", false) && !StrEqual(arg, "pyro", false) && !StrEqual(arg, "heavyweapons", false))
 	{
 		TF2_SetPlayerClass(client, TFClass_Soldier);
 		return Plugin_Handled;
@@ -420,7 +435,7 @@ public Action Cmd_ReloadConfigs(int client, int args)
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	if (GameRules_GetProp("m_bInWaitingForPlayers")) 
+	if (GameRules_GetProp("m_bInWaitingForPlayers") || GetClientCount() < 2) 
 		return;
 
 	OpenDoors();
@@ -448,9 +463,9 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	int traitorCount = GetRoleCount(TRAITOR);
 	int innoCount = GetRoleCount(INNOCENT);
 
-	if(player.role == INNOCENT)
+	if (player.role == INNOCENT)
 		innoCount--;
-	else if(player.role == TRAITOR)
+	else if (player.role == TRAITOR)
 		traitorCount--;
 
 	if (traitorCount == 0 && innoCount > 0)
@@ -488,9 +503,9 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 				player.karma = 10;
 			}	
 		}
-		else 
+		else
 		{
-			player.karma += 10;
+			player.karma += 20;
 
 			if (player.karma > 110)
 			{
@@ -498,7 +513,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 			}	
 		}
 	}
-	else if (player.role == TRAITOR && player.killCount == 3)
+	else if (player.role == TRAITOR && player.killCount % 3 == 0)
 	{
 		CPrintToChat(attacker, "%s You can now use the {fullred}INSTANT KILL{default} with your melee weapon!", TAG);
 	}
@@ -535,7 +550,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 		if (pAttacker.role == TRAITOR && IsMeleeActive(attacker) && pAttacker.killCount >= 3)
 		{
-			pAttacker.killCount = 0;
+			pAttacker.killCount -= 3;
 			CPrintToChat(attacker, "%s You just used your INSTANT KILL.", TAG);
 			damage = 9999.0;
 			return Plugin_Changed;
@@ -644,6 +659,12 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 
 		char name[64];
 		GetEntPropString(target, Prop_Data, "m_iName", name, sizeof(name));
+		float origin[3], clientOrigin[3];
+		GetEntPropVector(target, Prop_Send, "m_vecOrigin", origin); // Position of the body
+		GetClientAbsOrigin(client, clientOrigin);
+
+		if (GetVectorDistance(origin, clientOrigin) >= 300.0)
+			return Plugin_Continue;
 
 		if (StrEqual(name, "deadbody") || StrEqual(name, "fakebody"))
 		{
@@ -657,9 +678,6 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 		}
 		else if (StrEqual(name, "explosivebody"))
 		{
-			float origin[3];
-			GetEntPropVector(target, Prop_Send, "m_vecOrigin", origin); // Position of the body
-
 			int iBomb = CreateEntityByName("tf_generic_bomb");
 			DispatchKeyValueVector(iBomb, "origin", origin);
 			DispatchKeyValueFloat(iBomb, "damage", 500.0);
@@ -707,7 +725,9 @@ void SpawnRagdoll(const TTTPlayer player, const char[] name)
 	player.deathTime = GetGameTime();
 
 	int ent = CreateEntityByName("prop_ragdoll");
-	DispatchKeyValue(ent, "model", "models/player/soldier.mdl");
+	char m_ModelName[PLATFORM_MAX_PATH];
+	GetEntPropString(client, Prop_Data, "m_ModelName", m_ModelName, sizeof(m_ModelName));
+	DispatchKeyValue(ent, "model", m_ModelName);
 	DispatchKeyValue(ent, "targetname", name);
 	DispatchSpawn(ent);
 	ActivateEntity(ent);
@@ -765,7 +785,7 @@ int GetRoleCount(Role role, bool alive = true)
 		if (TTTPlayer(i).role != role)
 			continue;
 
-		if(alive && !IsPlayerAlive(i))
+		if (alive && !IsPlayerAlive(i))
 			continue;
 
 		count++;

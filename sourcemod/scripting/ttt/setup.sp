@@ -52,7 +52,7 @@ public void MakeRoundTimer()
 	HookSingleEntityOutput(iTimer, "OnSetupFinished", OnSetupFinished, true);
 	HookSingleEntityOutput(iTimer, "OnFinished", OnRoundEnd, true);
 
-	Event event = CreateEvent("teamplay_update_timer");
+	Event event = CreateEvent("teamplay_update_timer", true);
 	event.Fire();
 }
 
