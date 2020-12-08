@@ -21,6 +21,8 @@ ConVar g_Cvar_DetectiveRatio;
 ConVar g_Cvar_CreditStart;
 ConVar g_Cvar_KillCredits;
 ConVar g_Cvar_BodyFade;
+ConVar g_Cvar_Delay;
+ConVar g_Cvar_Chance;
 
 enum Role
 {
@@ -35,7 +37,8 @@ char g_sRoles[][] = { "NOROLE", "{lime}innocent{default}", "{fullred}traitor{def
 
 bool roundStarted;
 
-float g_fLastMessage[MAXPLAYERS + 1];
+float g_fStartSearchTime[MAXPLAYERS + 1];
+float g_fLastSearch[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
@@ -52,6 +55,7 @@ public Plugin myinfo =
 #include "ttt/tttplayer.sp"
 #include "ttt/shop.sp"
 #include "ttt/setup.sp"
+#include "ttt/buttons.sp"
 
 public void OnPluginStart()
 {
@@ -64,6 +68,8 @@ public void OnPluginStart()
 	g_Cvar_CreditStart = CreateConVar("ttt_initialcredits", "3", "Initial amount of credits to start with.", _, true, 0.0);
 	g_Cvar_KillCredits = CreateConVar("ttt_killcredits", "1", "Amount of credits to give traitors when killing a player", _, true, 0.0);
 	g_Cvar_BodyFade = CreateConVar("ttt_bodyfade", "30.0", "Time in seconds until a body fades and cannot be scanned anymore.", _, true, 0.0);
+	g_Cvar_Delay = CreateConVar("ttt_scan_delay", "90", "Delay for detectives to use their scanners.", _, true, 0.0);
+	g_Cvar_Chance = CreateConVar("ttt_fake_chance", "20", "Chances of the scanners to fake results.", _, true, 0.0, true, 100.0);
 	
 	LoadTranslations("common.phrases");
 	
@@ -95,9 +101,7 @@ public void OnConfigsExecuted()
 public void OnMapStart()
 {
 	roundStarted = false;
-	
 	FF(false);
-
 	SDKHook(FindEntityByClassname(MaxClients + 1, "tf_player_manager"), SDKHook_ThinkPost, ThinkPost);
 }
 
@@ -112,11 +116,11 @@ public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (StrEqual(classname, "tf_logic_arena") 
 	|| StrEqual(classname, "tf_logic_koth")
-	|| StrContains(classname, "tf_ammo") > -1 
-	|| StrContains(classname, "item_ammopack") > -1 
-	|| StrContains(classname, "item_healthkit") > -1)
+	|| StrContains(classname, "tf_ammo") == 0
+	|| StrContains(classname, "item_ammopack") == 0
+	|| StrContains(classname, "item_healthkit") == 0)
 	{
-		AcceptEntityInput(entity, "Kill");
+		RemoveEntity(entity);
 	}
 }
 
@@ -132,9 +136,9 @@ public void OnClientPutInServer(int client)
 
 public void OnClientDisconnect_Post(int client)
 {
-	if (!roundStarted)
+	if(!roundStarted)
 		return;
-	
+
 	int traitorCount = GetRoleCount(TRAITOR);
 	int innoCount = GetRoleCount(INNOCENT);
 
@@ -239,15 +243,14 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	if (!IsValidClient(victim))
 		return Plugin_Continue;
 
-	TTTPlayer player = TTTPlayer(victim);
-	Role victimRole = player.role;
+	TTTPlayer pVictim = TTTPlayer(victim);
 
 	int traitorCount = GetRoleCount(TRAITOR);
 	int innoCount = GetRoleCount(INNOCENT);
 
-	if (player.role == INNOCENT)
+	if (pVictim.role == INNOCENT)
 		innoCount--;
-	else if (player.role == TRAITOR)
+	else if (pVictim.role == TRAITOR)
 		traitorCount--;
 
 	if (traitorCount == 0 && innoCount > 0)
@@ -261,7 +264,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 		ForceTeamWin();
 	}
 
-	CreateTimer(0.0, CreateRagdoll, player);
+	CreateTimer(0.0, CreateRagdoll, pVictim);
 
 	if (!IsAdmin(victim))
 		SetClientListeningFlags(victim, VOICE_MUTED);
@@ -269,32 +272,32 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	if (!IsValidClient(attacker) || attacker == victim)
 		return Plugin_Handled;
 
-	player = TTTPlayer(attacker);
-	player.killCount++;
-	player.credits += g_Cvar_KillCredits.IntValue;
+	TTTPlayer pAttacker = TTTPlayer(attacker);
+	pAttacker.killCount++;
+	pAttacker.credits += g_Cvar_KillCredits.IntValue;
 
-	if (player.role != TRAITOR)
+	if (pAttacker.role != TRAITOR)
 	{
-		if (victimRole != TRAITOR)
+		if (pVictim.role != TRAITOR)
 		{
-			player.karma -= 10;
+			pAttacker.karma -= 10;
 
-			if (player.karma < 10)
+			if (pAttacker.karma < 10)
 			{
-				player.karma = 10;
-			}	
+				pAttacker.karma = 10;
+			}
 		}
 		else
 		{
-			player.karma += 20;
+			pAttacker.karma += 20;
 
-			if (player.karma > 110)
+			if (pAttacker.karma > 110)
 			{
-				player.karma = 110;
+				pAttacker.karma = 110;
 			}	
 		}
 	}
-	else if (player.role == TRAITOR && player.killCount % 3 == 0)
+	else if (pAttacker.role == TRAITOR && pAttacker.killCount % 3 == 0)
 	{
 		CPrintToChat(attacker, "%s You can now use the {fullred}INSTANT KILL{default} with your melee weapon!", TAG);
 	}
@@ -433,73 +436,11 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 public Action OnGetMaxHealth(int client, int &maxhealth)
 {
-	if(!IsValidClient(client)) 
+	if (!IsValidClient(client)) 
 		return Plugin_Continue;
 
 	maxhealth = 200;
 	return Plugin_Changed;
-}
-
-/* Scanner & Shop
-==================================================================================================== */
-
-public Action OnPlayerRunCmd(int client, int &buttons)
-{
-	if (!roundStarted || !IsPlayerAlive(client) || TF2_GetClientTeam(client) <= TFTeam_Spectator)
-		return Plugin_Continue;
-	
-	if (buttons & IN_RELOAD)
-	{
-		int target = GetClientAimTarget(client, false);
-		if (target == -1) 
-			return Plugin_Continue;
-
-		char name[64];
-		GetEntPropString(target, Prop_Data, "m_iName", name, sizeof(name));
-		float origin[3], clientOrigin[3];
-		GetEntPropVector(target, Prop_Send, "m_vecOrigin", origin); // Position of the body
-		GetClientAbsOrigin(client, clientOrigin);
-
-		if (GetVectorDistance(origin, clientOrigin) >= 300.0)
-			return Plugin_Continue;
-
-		if (StrEqual(name, "deadbody") || StrEqual(name, "fakebody"))
-		{
-			float now = GetGameTime();
-			if (now - g_fLastMessage[client] > 1) // Prevent spam
-			{
-				TTTPlayer player = TTTPlayer(GetEntPropEnt(target, Prop_Data, "m_hOwnerEntity"));
-				CPrintToChat(client, "%s {community}%N{default} was %s and died %0.1f seconds ago.", TAG, player.index, g_sRoles[player.role], now - player.deathTime);
-				g_fLastMessage[client] = now;
-			}
-		}
-		else if (StrEqual(name, "explosivebody"))
-		{
-			int iBomb = CreateEntityByName("tf_generic_bomb");
-			DispatchKeyValueVector(iBomb, "origin", origin);
-			DispatchKeyValueFloat(iBomb, "damage", 500.0);
-			DispatchKeyValueFloat(iBomb, "radius", 500.0);
-			DispatchKeyValue(iBomb, "health", "1");
-			DispatchKeyValue(iBomb, "explode_particle", "fireSmokeExplosion2");
-			DispatchKeyValue(iBomb, "sound", "vo/null.mp3");
-			DispatchSpawn(iBomb);
-			AcceptEntityInput(iBomb, "Detonate");
-			
-			AcceptEntityInput(target, "Kill");	
-		}
-
-		return Plugin_Continue;
-	}
-	else 
-	{
-		TTTPlayer player = TTTPlayer(client);
-		if (buttons & IN_SCORE && player.role == TRAITOR)
-		{
-			OpenShop(player);
-		}
-	}
-	
-	return Plugin_Continue;
 }
 
 /* Functions

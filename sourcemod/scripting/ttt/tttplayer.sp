@@ -72,12 +72,6 @@ methodmap TTTPlayer
 		public set( const int i )	{ this.SetProp("credits", i); }
 	}
 
-	property int roundsPast
-	{
-		public get() 				{ return this.GetProp("roundsPast"); }
-		public set( const int i )	{ this.SetProp("roundsPast", i); }
-	}
-
 	property int karma
 	{
 		public get() 				{ return this.GetProp("karma"); }
@@ -102,7 +96,7 @@ methodmap TTTPlayer
 		
 		char atts[32][32];
 		int count = ExplodeString(att, " ; ", atts, 32, 32);
-		if (att[0]) 
+		if (att[0])
 		{
 			TF2Items_SetNumAttributes(hWeapon, count / 2);
 			int i2 = 0;
@@ -214,9 +208,7 @@ methodmap TTTPlayer
 	public void Reset()
 	{
 		int karma = this.karma;
-		int roundsPast = this.roundsPast + 1;
 		this.hMap.Clear();
 		this.karma = karma;
-		this.roundsPast = roundsPast;
 	}
 };

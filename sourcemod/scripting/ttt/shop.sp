@@ -62,7 +62,7 @@ public int Handler_Shop(Menu smenu, MenuAction action, int client, int param2)
 			else if(StrEqual(strings[0], "minigun"))
 			{
 				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Primary);
-				int wep = player.SpawnWeapon("tf_weapon_minigun", 15, 1, 6);
+				int wep = player.SpawnWeapon("tf_weapon_minigun", 15, 1, 6, "305 ; 1.0");
 				SetAmmo(client, wep, 100);
 			}
 			else if(StrEqual(strings[0], "rifle"))

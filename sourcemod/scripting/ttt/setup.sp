@@ -64,6 +64,12 @@ public void MakeRoundTimer()
 
 public void StartTTT()
 {
+	if(GetClientCount() == 0)
+	{
+		ForceTeamWin();
+		return;
+	}
+
 	OpenDoors();
 	AssignTraitors();
 	AssignDetectives();
@@ -84,8 +90,6 @@ public void StartTTT()
 			player.Setup();
 		}
 	}
-
-	roundStarted = true;
 
 	int ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "func_respawnroomvisualizer")) != -1)
@@ -132,6 +136,7 @@ public void StartTTT()
 		AcceptEntityInput(ent, "SetRedTeamRespawnWaveTime");
 	}
 
+	roundStarted = true;
 	FF(true);
 }
 
@@ -147,7 +152,6 @@ public void AssignTraitors()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = TRAITOR;
 			player.credits = 3;
-			player.roundsPast = 0;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
 			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 		}
@@ -167,7 +171,6 @@ public void AssignDetectives()
 			TTTPlayer player = TTTPlayer(random);
 			player.role = DETECTIVE;
 			player.credits = 3;
-			player.roundsPast = 0;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[DETECTIVE]);
 			CPrintToChat(random, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
 		}
@@ -184,7 +187,7 @@ public int GetRandomPlayer()
 		if (IsValidClient(i) && TTTPlayer(i).role == NOROLE)
 		{
 			TTTPlayer player = TTTPlayer(i);
-			if(player.role == NOROLE && player.roundsPast != 1)
+			if(player.role == NOROLE)
 				clients[clientCount++] = i;
 		}
 			
