@@ -1,9 +1,8 @@
-
 #define MAX_BUTTONS 25
 static int g_LastButtons[MAXPLAYERS + 1];
 static Handle g_hSearch[MAXPLAYERS + 1];
 
-/*Scanner &Shop
+/* Scanner & Shop
 ==================================================================================================== */
 
 public Action OnPlayerRunCmd(int client, int &buttons)
@@ -19,9 +18,9 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 				OnPress(client, button);
 			}
 		}
-		else if ((g_LastButtons[client] & button) && button == IN_USE)
+		else if (g_LastButtons[client] & button)
 		{
-			OnUseRelease(client);
+			OnRelease(client, button);
 		}
 	}
 
@@ -69,6 +68,13 @@ void OnPress(int client, int button)
 			}
 		}
 
+		case IN_SCORE:
+		{
+			TTTPlayer player = TTTPlayer(client);
+			if(player.role == TRAITOR)
+				OpenShop(player);
+		}
+
 		case IN_USE:
 		{
             if (TTTPlayer(client).role != DETECTIVE || !IsMeleeActive(client))
@@ -99,13 +105,6 @@ void OnPress(int client, int button)
             delete g_hSearch[client];
             g_hSearch[client] = CreateTimer(0.1, ScanPlayer, client, TIMER_REPEAT);
         }
-
-		case IN_SCORE:
-		{
-            TTTPlayer tttClient = TTTPlayer(client);
-            if(tttClient.role == TRAITOR)
-			    OpenShop(tttClient);
-		}
 	}
 }
 
@@ -138,23 +137,27 @@ Action ScanPlayer(Handle timer, int client)
 		g_hSearch[client] = null;
 		return Plugin_Stop;
 	}
-	else
-	{
-		char szBuffer[32];
-		int len = Format(szBuffer, sizeof(szBuffer), "[");
-		for (int i = 0; i < 5; i++)
-			len += Format(szBuffer[len], sizeof(szBuffer) - len, progress >= i ? "|" : "  ");
-		Format(szBuffer[len], sizeof(szBuffer) - len, "]");
 
-		SetHudTextParams(-1.0, 0.3, 0.1, 255, 255, 255, 255);
-		ShowHudText(client, 5, "Scanning %N\n%s", target, szBuffer);
-		ShowHudText(target, 5, "You are being scanned!\n%s", szBuffer);
-	}
+	char szBuffer[32];
+	int len = Format(szBuffer, sizeof(szBuffer), "[");
+	for (int i = 0; i < 5; i++)
+		len += Format(szBuffer[len], sizeof(szBuffer) - len, progress >= i ? "|" : "  ");
+	Format(szBuffer[len], sizeof(szBuffer) - len, "]");
+
+	SetHudTextParams(-1.0, 0.3, 0.1, 255, 255, 255, 255);
+	ShowHudText(client, 5, "Scanning %N\n%s", target, szBuffer);
+	ShowHudText(target, 5, "You are being scanned!\n%s", szBuffer);
 
 	return Plugin_Continue;
 }
 
-void OnUseRelease(int client)
+void OnRelease(int client, int button)
 {
-    delete g_hSearch[client];
+	switch (button)
+	{
+		case IN_USE:
+		{
+			delete g_hSearch[client];
+		}
+	}
 }

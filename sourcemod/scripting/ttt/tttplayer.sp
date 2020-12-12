@@ -159,7 +159,7 @@ methodmap TTTPlayer
 			panel.DrawItem("You are A TRAITOR.");
 			panel.DrawItem("Kill all the innocents without dying!");
 			panel.DrawItem("You can see who your fellow traitors are.");
-			panel.DrawItem("Open the Secoreboard to view the buy menu");
+			panel.DrawItem("Open the Scoreboard to view the buy menu");
 		}
 		else if (this.role == DETECTIVE)
 		{
@@ -183,10 +183,7 @@ methodmap TTTPlayer
 		int client = this.index;
 		if (IsPlayerAlive(client))
 		{
-			int EntProp = GetEntProp(client, Prop_Send, "m_lifeState");
-			SetEntProp(client, Prop_Send, "m_lifeState", 2);
-			TF2_ChangeClientTeam(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
-			SetEntProp(client, Prop_Send, "m_lifeState", EntProp);
+			FakeDeath(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
 		}
 		else
 		{
@@ -197,7 +194,6 @@ methodmap TTTPlayer
 		TF2_RegeneratePlayer(client);
 		this.GiveInitialWeapon();
 		this.ShowRoleMenu();
-		this.credits = g_Cvar_CreditStart.IntValue;
 
 		if (this.role == DETECTIVE)
 		{
@@ -208,7 +204,11 @@ methodmap TTTPlayer
 	public void Reset()
 	{
 		int karma = this.karma;
+		int credits = this.credits;
+
 		this.hMap.Clear();
+
 		this.karma = karma;
+		this.credits = credits;
 	}
 };

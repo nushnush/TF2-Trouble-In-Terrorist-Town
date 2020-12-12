@@ -1,4 +1,4 @@
-public void FF(bool status)
+stock void FF(bool status)
 {
 	ConVar hFF = FindConVar("mp_friendlyfire");
 	int iFlags = hFF.Flags;
@@ -7,7 +7,7 @@ public void FF(bool status)
 	hFF.Flags = iFlags; 
 }
 
-public void OpenDoors()
+stock void OpenDoors()
 {
 	int ent = MaxClients + 1;
 	while ((ent = FindEntityByClassname(ent, "func_door")) != -1)
@@ -27,10 +27,10 @@ public void OpenDoors()
 	}*/
 }
 
-public void MakeRoundTimer()
+stock void MakeRoundTimer()
 {
 	//Kill the timer created by the game
-	int iGameTimer = -1;
+	int iGameTimer = MaxClients + 1;
 	while ((iGameTimer = FindEntityByClassname(iGameTimer, "team_round_timer")) > MaxClients)
 	{
 		if (GetEntProp(iGameTimer, Prop_Send, "m_bShowInHUD"))
@@ -62,7 +62,7 @@ public void MakeRoundTimer()
 	event.Fire();
 }
 
-public void StartTTT()
+stock void StartTTT()
 {
 	if(GetClientCount() == 0)
 	{
@@ -127,58 +127,100 @@ public void StartTTT()
 		AcceptEntityInput(ent, "Disable");
 	}
 	
-	ent = FindEntityByClassname(MaxClients + 1, "tf_gamerules");
+	/*ent = FindEntityByClassname(MaxClients + 1, "tf_gamerules");
 	if (ent != -1)
 	{
 		SetVariantFloat(999.9);
 		AcceptEntityInput(ent, "SetBlueTeamRespawnWaveTime");
 		SetVariantFloat(999.9);
 		AcceptEntityInput(ent, "SetRedTeamRespawnWaveTime");
-	}
+	}*/
 
 	roundStarted = true;
 	FF(true);
 }
 
-public void AssignTraitors()
+stock void AssignTraitors()
 {
 	int required = GetClientCount() / g_Cvar_TraitorRatio.IntValue;
 
-	while(required > 0)
+	while (required > 0)
 	{
-		int random = GetRandomPlayer();
-		if(random != -1)
+		int random = -1;
+
+		if (g_aForceTraitor.Length > 0)
+		{
+			random = GetClientOfUserId(g_aForceTraitor.Get(0));
+
+			if (IsValidClient(random))
+			{
+				TTTPlayer player = TTTPlayer(random);
+				player.role = TRAITOR;
+				player.credits += 2;
+				CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
+				CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
+				required--;
+			}
+
+			g_aForceTraitor.Erase(0);
+			continue;
+		}
+
+		random = GetRandomPlayer();
+
+		if (random != -1)
 		{
 			TTTPlayer player = TTTPlayer(random);
 			player.role = TRAITOR;
-			player.credits = 3;
+			player.credits += 2;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
 			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 		}
+
 		required--;
 	}
 }
 
-public void AssignDetectives()
+stock void AssignDetectives()
 {
 	int required = GetClientCount() / g_Cvar_DetectiveRatio.IntValue;
 
-	while(required > 0)
+	while (required > 0)
 	{
-		int random = GetRandomPlayer();
-		if(random != -1)
+		int random = -1;
+
+		if (g_aForceDetective.Length > 0)
+		{
+			random = GetClientOfUserId(g_aForceDetective.Get(0));
+
+			if (IsValidClient(random))
+			{
+				TTTPlayer player = TTTPlayer(random);
+				player.role = DETECTIVE;
+				CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[DETECTIVE]);
+				CPrintToChat(random, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
+				required--;
+			}
+
+			g_aForceDetective.Erase(0);
+			continue;
+		}
+
+		random = GetRandomPlayer();
+
+		if (random != -1)
 		{
 			TTTPlayer player = TTTPlayer(random);
 			player.role = DETECTIVE;
-			player.credits = 3;
 			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[DETECTIVE]);
 			CPrintToChat(random, "%s {community}You have %i karma. You deal %i%% damage.", TAG, player.karma, player.karma);
 		}
+
 		required--;
 	}
 }
 
-public int GetRandomPlayer()  
+stock int GetRandomPlayer()  
 {  
 	int[] clients = new int[MaxClients];
 	int clientCount;
@@ -186,9 +228,7 @@ public int GetRandomPlayer()
 	{
 		if (IsValidClient(i) && TTTPlayer(i).role == NOROLE)
 		{
-			TTTPlayer player = TTTPlayer(i);
-			if(player.role == NOROLE)
-				clients[clientCount++] = i;
+			clients[clientCount++] = i;
 		}
 			
 	}
