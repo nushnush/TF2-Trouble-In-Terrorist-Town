@@ -7,6 +7,16 @@ static Handle g_hSearch[MAXPLAYERS + 1];
 
 public Action OnPlayerRunCmd(int client, int &buttons)
 {
+	if (!IsValidClient(client))
+		return Plugin_Continue;
+
+	TTTPlayer player = TTTPlayer(client);
+
+	if (player.role == PESTILENCE)
+	{
+		Pestilence_FindTarget(client);
+	}
+		
 	for (int i = 0; i < MAX_BUTTONS; i++)
 	{
 		int button = (1 << i);
@@ -15,7 +25,7 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 		{
 			if (!(g_LastButtons[client] & button))
 			{
-				OnPress(client, button);
+				OnPress(player, button);
 			}
 		}
 		else if (g_LastButtons[client] & button)
@@ -28,8 +38,10 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 	return Plugin_Continue;
 }
 
-void OnPress(int client, int button)
+void OnPress(const TTTPlayer player, int button)
 {
+	int client = player.index;
+
 	switch (button)
 	{
 		case IN_RELOAD:
@@ -49,8 +61,17 @@ void OnPress(int client, int button)
 
 			if (StrEqual(name, "deadbody") || StrEqual(name, "fakebody"))
 			{
-				TTTPlayer player = TTTPlayer(GetEntPropEnt(target, Prop_Data, "m_hOwnerEntity"));
-				CPrintToChat(client, "%s {community}%N{default} was %s and died %0.1f seconds ago.", TAG, player.index, g_sRoles[player.role], GetGameTime() - player.deathTime);
+				TTTPlayer other = TTTPlayer(GetEntPropEnt(target, Prop_Data, "m_hOwnerEntity"));
+				if(other.killerRole == PESTILENCE)
+				{
+					CPrintToChat(client, "%s {community}%N{default} was %s and died %0.1f seconds ago, murdered by the %s.", 
+					TAG, other.index, g_sRoles[other.role], GetEngineTime() - other.deathTime, g_sRoles[PESTILENCE]);
+				}
+				else 
+				{
+					CPrintToChat(client, "%s {community}%N{default} was %s and died %0.1f seconds ago.", 
+					TAG, other.index, g_sRoles[other.role], GetEngineTime() - other.deathTime);
+				}
 			}
 			else if (StrEqual(name, "explosivebody"))
 			{
@@ -68,16 +89,9 @@ void OnPress(int client, int button)
 			}
 		}
 
-		case IN_SCORE:
-		{
-			TTTPlayer player = TTTPlayer(client);
-			if(player.role == TRAITOR)
-				OpenShop(player);
-		}
-
 		case IN_USE:
 		{
-            if (TTTPlayer(client).role != DETECTIVE || !IsMeleeActive(client))
+            if (!IsPlayerAlive(client) || player.role != DETECTIVE || !IsMeleeActive(client))
                 return;
 
             int target = GetClientAimTarget(client);
@@ -86,10 +100,10 @@ void OnPress(int client, int button)
                 return;
             }
 
-            float now = GetGameTime();
-            if (now - g_fLastSearch[client] < g_Cvar_Delay.IntValue)
+            float now = GetEngineTime();
+            if (g_fLastAbility[client] + g_cvScannerDelay.IntValue - now > 0)
             {
-                CPrintToChat(client, "%s Please wait %0.1f seconds before using the scanner again.", TAG, g_Cvar_Delay.IntValue - (now - g_fLastSearch[client]));
+                CPrintToChat(client, "%s Please wait %0.1f seconds before using the scanner again.", TAG, g_fLastAbility[client] + g_cvScannerDelay.IntValue - now);
                 return;
             }
 
@@ -105,6 +119,96 @@ void OnPress(int client, int button)
             delete g_hSearch[client];
             g_hSearch[client] = CreateTimer(0.1, ScanPlayer, client, TIMER_REPEAT);
         }
+
+		case IN_SCORE:
+		{
+			if (player.role == TRAITOR)
+				OpenShop(player);
+		}
+
+		case IN_ATTACK2:
+		{
+			if (player.role == DISGUISER)
+			{
+				if(!IsPlayerAlive(client))
+				{
+					return;
+				}
+
+				int target = GetClientAimTarget(client);
+				if (target == -1)
+				{
+					return;
+				}
+
+				float now = GetEngineTime();
+				if (g_fLastAbility[client] + g_cvDisguiseDelay.IntValue - now > 0)
+				{
+					CPrintToChat(client, "%s Please wait %0.1f seconds before using the disguise again.", TAG, g_fLastAbility[client] + g_cvDisguiseDelay.IntValue - now);
+					return;
+				}
+
+				PerformDisguise(client, target);
+				ForcePlayerSuicide(target);
+				g_fLastAbility[client] = now;
+			}
+			else if (player.role == NECROMANCER)
+			{
+				if(!IsPlayerAlive(client))
+				{
+					return;
+				}
+
+				float now = GetEngineTime();
+				
+				if (g_fLastAbility[client] + g_cvEarthquakeDelay.IntValue - now > 0)
+				{
+					CPrintToChat(client, "%s Please wait %0.1f seconds before summoning earthquakes again.", TAG, g_fLastAbility[client] + g_cvEarthquakeDelay.IntValue - now);
+					return;
+				}
+
+				PerformEarthquakes();
+				g_fLastAbility[client] = now;
+			}
+			else if (player.role == PESTILENCE)
+			{
+				if(!IsPlayerAlive(client))
+				{
+					return;
+				}
+
+				if (!IsValidClient(g_iLastTouched[client]))
+				{
+					CPrintToChat(client, "%s You don't have a valid target.", TAG);
+					return;
+				}
+
+				float now = GetEngineTime();
+				
+				if (g_fLastAbility[client] + g_cvInfectDelay.IntValue - now > 0)
+				{
+					CPrintToChat(client, "%s Please wait %0.1f seconds before summoning earthquakes again.", TAG, g_fLastAbility[client] + g_cvInfectDelay.IntValue - now);
+					return;
+				}
+
+				PerformInfection(player);
+			}
+			else if (player.role == THUNDER)
+			{
+				if(!IsPlayerAlive(client))
+				{
+					return;
+				}
+
+				int target = GetClientAimTarget(client);
+				if (target == -1)
+				{
+					return;
+				}
+
+				PerformThunder(player, target);
+			}
+		}
 	}
 }
 
@@ -123,17 +227,18 @@ Action ScanPlayer(Handle timer, int client)
 		return Plugin_Stop;
 	}
 
-	float now = GetGameTime();
+	float now = GetEngineTime();
 	int progress = RoundToNearest(now - g_fStartSearchTime[client]);
 
 	if (progress >= 5)
 	{
-		g_fLastSearch[client] = now;
-		bool isTraitor = TTTPlayer(target).role == TRAITOR;
+		g_fLastAbility[client] = now;
+		Role role = TTTPlayer(target).role;
+		bool isTraitor = role >= TRAITOR;
 
 		// default: 20% chance to fake results
-		isTraitor = GetRandomInt(1, 100) <= g_Cvar_Chance.IntValue ? !isTraitor : isTraitor;
-		CPrintToChat(client, "%s %N is %s.", TAG, target, !isTraitor ? g_sRoles[INNOCENT] : g_sRoles[TRAITOR]);
+		isTraitor = GetRandomInt(1, 100) <= g_cvScannerChance.IntValue ? !isTraitor : isTraitor;
+		CPrintToChat(client, "%s %N is %s.", TAG, target, !isTraitor ? g_sRoles[INNOCENT] : g_sRoles[role]);
 		g_hSearch[client] = null;
 		return Plugin_Stop;
 	}

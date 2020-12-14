@@ -60,6 +60,12 @@ methodmap TTTPlayer
 		public set( const Role i )	{ this.SetProp("role", i); }
 	}
 
+	property Role killerRole
+	{
+		public get() 				{ return this.GetProp("killerRole"); }
+		public set( const Role i )	{ this.SetProp("killerRole", i); }
+	}
+
 	property int killCount
 	{
 		public get() 				{ return this.GetProp("killCount"); }
@@ -143,54 +149,95 @@ methodmap TTTPlayer
 		SetAmmo(client, wep, 16);
 	}
 
-	public void ShowRoleMenu()
+	public void ShowRoleMenu(Role role = NOROLE)
 	{
 		Panel panel = new Panel();
 		panel.SetTitle("[TF2] Trouble In Terrorist Town:");
-		
-		if (this.role == INNOCENT)
+
+		if (role == NOROLE)
+			role = this.role;
+
+		switch (role)
 		{
-			panel.DrawItem("You are an innocent.");
-			panel.DrawItem("Survive the to win the round!");
-			panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
-		}
-		else if (this.role == TRAITOR)
-		{
-			panel.DrawItem("You are A TRAITOR.");
-			panel.DrawItem("Kill all the innocents without dying!");
-			panel.DrawItem("You can see who your fellow traitors are.");
-			panel.DrawItem("Open the Scoreboard to view the buy menu");
-		}
-		else if (this.role == DETECTIVE)
-		{
-			panel.DrawItem("You are A DETECTIVE!");
-			panel.DrawItem("Kill all the traitors without dying!");
-			panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
-		}
-		else
-		{
-			panel.DrawItem("You don't have a role.");
-			panel.DrawItem("Wait for the current round to end!");
+			case INNOCENT:
+			{
+				panel.DrawItem("You are an innocent.");
+				panel.DrawItem("Survive the to win the round!");
+				panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
+			}
+
+			case DETECTIVE:
+			{
+				panel.DrawItem("You are A DETECTIVE!");
+				panel.DrawItem("Kill all the traitors without dying!");
+				panel.DrawItem("Killing innocents as an innocent lowers your karma, which lowers your damage.");
+			}
+
+			case TRAITOR:
+			{
+				panel.DrawItem("You are A TRAITOR.");
+				panel.DrawItem("Kill all the innocents without dying!");
+				panel.DrawItem("Your teammates are marked with an outline.");
+				panel.DrawItem("You can see who your fellow traitors are.");
+				panel.DrawItem("Open the Scoreboard to view the buy menu.");
+			}
+
+			case DISGUISER:
+			{
+				panel.DrawItem("You are THE DISGUISER.");
+				panel.DrawItem("Kill all the innocents without dying!");
+				panel.DrawItem("Your teammates are marked with an outline.");
+				panel.DrawItem("When killing a target, you get their cosmetics!");
+			}
+
+			case NECROMANCER:
+			{
+				panel.DrawItem("You are THE NECROMANCER.");
+				panel.DrawItem("Kill all the innocents without dying!");
+				panel.DrawItem("Your teammates are marked with an outline.");
+				panel.DrawItem("When alive, press MOUSE2 to cause earthquakes that'll shake players screens!");
+				panel.DrawItem("When dead, type 'RESPAWN' to resurrect random traitor!");
+			}
+
+			case PESTILENCE:
+			{
+				panel.DrawItem("You are THE PESTILENCE.");
+				panel.DrawItem("Your teammates are marked with an outline.");
+				panel.DrawItem("Kill all the innocents without dying!");
+				panel.DrawItem("You can do so by touching other players.");
+				panel.DrawItem("After touching a player, press MOUSE2 to kill them from any distance!");
+				char text[128];
+				FormatEx(text, sizeof(text), "You will be exposed after having %i victims.", g_cvExposeCount.IntValue);
+				panel.DrawItem(text);
+			}
+
+			case THUNDER:
+			{
+				panel.DrawItem("You are THE THUNDER.");
+				panel.DrawItem("Kill all the innocents without dying!");
+				panel.DrawItem("Your teammates are marked with an outline.");
+				panel.DrawItem("Press MOUSE2 to zap players (no cooldown)");
+				panel.DrawItem("You will be launched to the sky with no weapons upon 1st kill.");
+				panel.DrawItem("Players will get AWPs with 1 bullet in order to kill you.");
+			}
+
+			default:
+			{
+				panel.DrawItem("You don't have a role.");
+				panel.DrawItem("Wait for the current round to end!");
+			}
 		}
 
 		panel.DrawItem("Press Reload to inspect a body.");
-		panel.Send(this.index, RoleMenu, 15);
+		panel.Send(this.index, RoleMenu, 30);
 		delete panel;
 	}
 
 	public void Setup()
 	{
 		int client = this.index;
-		if (IsPlayerAlive(client))
-		{
-			FakeDeath(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
-		}
-		else
-		{
-			TF2_ChangeClientTeam(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
-			TF2_RespawnPlayer(client);
-		}
-				
+		
+		Swap(client, this.role == DETECTIVE ? TFTeam_Blue : TFTeam_Red);
 		TF2_RegeneratePlayer(client);
 		this.GiveInitialWeapon();
 		this.ShowRoleMenu();
@@ -212,3 +259,5 @@ methodmap TTTPlayer
 		this.credits = credits;
 	}
 };
+
+public int RoleMenu(Menu menu, MenuAction action, int param1, int param2) {  }

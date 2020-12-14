@@ -11,38 +11,62 @@
 #include <tf2_stocks>
 #include <sdkhooks>
 #include <sdktools>
+#include <sendproxy>
 
 #pragma newdecls required
-
-ConVar g_Cvar_SetupTime;
-ConVar g_Cvar_RoundTime;
-ConVar g_Cvar_TraitorRatio;
-ConVar g_Cvar_DetectiveRatio;
-ConVar g_Cvar_CreditStart;
-ConVar g_Cvar_KillInnoCredits;
-ConVar g_Cvar_KillTraitorCredits;
-ConVar g_Cvar_BodyFade;
-ConVar g_Cvar_Delay;
-ConVar g_Cvar_Chance;
 
 enum Role
 {
 	NOROLE = 0,
 	INNOCENT,
+	DETECTIVE,
 	TRAITOR,
-	DETECTIVE
+	DISGUISER,
+	NECROMANCER,
+	PESTILENCE,
+	THUNDER
 }
 
+enum RoundStatus
+{
+	Round_Inactive = -1,
+	Round_Setup,
+	Round_Active,
+	Round_Ended
+}
+
+RoundStatus g_eRound;
+
+ConVar g_cvSetupTime;
+ConVar g_cvRoundTime;
+ConVar g_cvTraitorRatio;
+ConVar g_cvDetectiveRatio;
+ConVar g_cvCreditStart;
+ConVar g_cvCreditsOnRound;
+ConVar g_cvKillInnoCredits;
+ConVar g_cvKillTraitorCredits;
+ConVar g_cvBodyFade;
+ConVar g_cvScannerDelay;
+ConVar g_cvScannerChance;
+ConVar g_cvDisguiseDelay;
+ConVar g_cvEarthquakeDelay;
+ConVar g_cvRespawnDelay;
+ConVar g_cvInfectDelay;
+ConVar g_cvExposeCount;
+
 //char g_sDoorList[][] = { "func_door", "func_door_rotating", "func_movelinear" };
-char g_sRoles[][] = { "NOROLE", "{lime}innocent{default}", "{fullred}traitor{default}", "{dodgerblue}detective{default}" };
+char g_sRoles[][] = { "NOROLE", "{lime}Innocent{default}", "{dodgerblue}Detective{default}", "{fullred}Traitor{default}", 
+"{yellow}Disguiser{default}", "{mediumpurple}Necromancer{default}", "{black}Pestilence{default}", "{strange}Thunder{default}"};
 
 ArrayList g_aForceTraitor;
 ArrayList g_aForceDetective;
 
-bool roundStarted;
+Handle g_hSDKCallEquipWearable;
 
 float g_fStartSearchTime[MAXPLAYERS + 1];
-float g_fLastSearch[MAXPLAYERS + 1];
+float g_fLastAbility[MAXPLAYERS + 1];
+
+int g_iLastTouched[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
@@ -59,33 +83,55 @@ public Plugin myinfo =
 #include "ttt/tttplayer.sp"
 #include "ttt/shop.sp"
 #include "ttt/setup.sp"
+#include "ttt/disguiser.sp"
+#include "ttt/necromancer.sp"
+#include "ttt/pestilence.sp"
+#include "ttt/thunder.sp"
 #include "ttt/buttons.sp"
 
 public void OnPluginStart()
 {
-	AddServerTag("ttt");
+	GameData hTF2 = new GameData("sm-tf2.games");
+	if (!hTF2)
+		SetFailState("Could not find sm-tf2.games gamedata!");
+
+	StartPrepSDKCall(SDKCall_Player);
+	PrepSDKCall_SetVirtual(hTF2.GetOffset("RemoveWearable") - 1); // Assume EquipWearable is always behind RemoveWearable
+	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
+	g_hSDKCallEquipWearable = EndPrepSDKCall();
+	if (!g_hSDKCallEquipWearable)
+		SetFailState("Failed to create call: CBasePlayer::EquipWearable");
+		
+	delete hTF2;
 	
-	g_Cvar_SetupTime = CreateConVar("ttt_setuptime", "30", "Time in seconds to prepare before the ttt starts.", _, true, 5.0);
-	g_Cvar_RoundTime = CreateConVar("ttt_roundtime", "240", "Round duration in seconds", _, true, 10.0, true, 900.0);
-	g_Cvar_TraitorRatio = CreateConVar("ttt_traitor_ratio", "3", "1 Traitor out of every X players in the server", _, true, 2.0);
-	g_Cvar_DetectiveRatio = CreateConVar("ttt_detective_ratio", "11", "1 Detective out of every X players in the server", _, true, 3.0);
-	g_Cvar_CreditStart = CreateConVar("ttt_initialcredits", "3", "Initial amount of credits to start with.", _, true, 0.0);
-	g_Cvar_KillInnoCredits = CreateConVar("ttt_kill_innocent_credits", "1", "Amount of credits to give traitors when killing a player", _, true, 0.0);
-	g_Cvar_KillTraitorCredits = CreateConVar("ttt_kill_traitor_credits", "2", "Amount of credits to give innocents when killing a traitor", _, true, 0.0);
-	g_Cvar_BodyFade = CreateConVar("ttt_bodyfade", "30.0", "Time in seconds until a body fades and cannot be scanned anymore.", _, true, 0.0);
-	g_Cvar_Delay = CreateConVar("ttt_scan_delay", "90", "Delay for detectives to use their scanners.", _, true, 0.0);
-	g_Cvar_Chance = CreateConVar("ttt_fake_chance", "20", "Chances of the scanners to fake results.", _, true, 0.0, true, 100.0);
+	g_cvSetupTime = CreateConVar("ttt_setup_time", "30", "Time in seconds to prepare before the ttt starts.", _, true, 5.0);
+	g_cvRoundTime = CreateConVar("ttt_round_time", "240", "Round duration in seconds", _, true, 10.0, true, 900.0);
+	g_cvTraitorRatio = CreateConVar("ttt_traitor_ratio", "3", "1 Traitor out of every X players in the server", _, true, 2.0);
+	g_cvDetectiveRatio = CreateConVar("ttt_detective_ratio", "11", "1 Detective out of every X players in the server", _, true, 3.0);
+	g_cvCreditStart = CreateConVar("ttt_initial_credits", "3", "Initial amount of credits to start with.", _, true, 0.0);
+	g_cvCreditsOnRound = CreateConVar("ttt_credits_on_round", "2", "Amount of credits to give when round starts.", _, true, 0.0);
+	g_cvKillInnoCredits = CreateConVar("ttt_kill_innocent_credits", "1", "Amount of credits to give traitors when killing a player", _, true, 0.0);
+	g_cvKillTraitorCredits = CreateConVar("ttt_kill_traitor_credits", "2", "Amount of credits to give innocents when killing a traitor", _, true, 0.0);
+	g_cvBodyFade = CreateConVar("ttt_body_fade", "30.0", "Time in seconds until a body fades and cannot be scanned anymore.", _, true, 0.0);
+	g_cvScannerDelay = CreateConVar("ttt_scanner_delay", "90", "Delay for detectives to use their scanners.", _, true, 0.0);
+	g_cvScannerChance = CreateConVar("ttt_scanner_chance", "20", "Chances of the scanners to fake results.", _, true, 0.0, true, 100.0);
+	g_cvDisguiseDelay = CreateConVar("ttt_disguise_delay", "90", "Delay for disguisers to use their ability.", _, true, 0.0);
+	g_cvEarthquakeDelay = CreateConVar("ttt_earthquake_delay", "90", "Delay for necromancers to use their earthquake ability.", _, true, 0.0);
+	g_cvRespawnDelay = CreateConVar("ttt_respawn_delay", "999", "Delay for necromancers to use their respawn ability.", _, true, 0.0);
+	g_cvInfectDelay = CreateConVar("ttt_infect_delay", "10", "Delay for pestilences to use their infect ability.", _, true, 0.0);
+	g_cvExposeCount = CreateConVar("ttt_expose_count", "3", "Amount of victims required to expost the pestilence.", _, true, 0.0);
 	
 	LoadTranslations("common.phrases");
 	
-	HookEvent("player_team", Event_PlayerTeamPre, EventHookMode_Pre);
+	HookEvent("player_team", Event_ToBlock, EventHookMode_Pre);
 	HookEvent("player_death", Event_PlayerDeathPre, EventHookMode_Pre);
 	HookEvent("teamplay_round_start", Event_RoundStart, EventHookMode_Pre);
 	HookEvent("teamplay_round_win", Event_RoundEnd);
 	HookEvent("teamplay_round_stalemate", Event_RoundEnd);
 	
 	RegAdminCmd("sm_ttt_reloadconfig", Cmd_ReloadConfigs, ADMFLAG_CONFIG);
-	RegConsoleCmd("sm_roles", Cmd_RoleShop);
+	RegConsoleCmd("sm_roles", Cmd_RoleList);
+	RegConsoleCmd("sm_shop", Cmd_Shop);
 
 	AddCommandListener(Listener_JoinTeam, "autoteam");
 	AddCommandListener(Listener_JoinTeam, "jointeam");
@@ -95,13 +141,14 @@ public void OnPluginStart()
 	CreateTimer(2.0, Timer_Hud, _, TIMER_REPEAT);
 	
 	hMap[0] = new StringMap();
-
-	g_aForceTraitor = new ArrayList();
+	g_aForceTraitor = new ArrayList(2);
 	g_aForceDetective = new ArrayList();
 }
 
 public void OnConfigsExecuted()
 {
+	InsertServerTag("ttt");
+
 	FindConVar("mp_autoteambalance").SetInt(0);
 	FindConVar("mp_teams_unbalance_limit").SetInt(0);
 
@@ -110,7 +157,10 @@ public void OnConfigsExecuted()
 
 public void OnMapStart()
 {
-	roundStarted = false;
+	Necromancer_OnMapStart();
+	Thunder_OnMapStart();
+
+	g_eRound = Round_Inactive;
 	FF(false);
 	SDKHook(FindEntityByClassname(MaxClients + 1, "tf_player_manager"), SDKHook_ThinkPost, ThinkPost);
 }
@@ -137,26 +187,31 @@ public void OnClientPutInServer(int client)
 	
 	TTTPlayer player = TTTPlayer(client);
 	player.karma = 100;
-	player.credits = g_Cvar_CreditStart.IntValue;
+	player.credits = g_cvCreditStart.IntValue;
+}
+
+public void OnClientDisconnect(int client)
+{
+	SendProxy_Unhook(client, "m_bGlowEnabled", SendProxy_Glow);
 }
 
 public void OnClientDisconnect_Post(int client)
 {
-	if(!roundStarted)
+	if (g_eRound != Round_Active)
 		return;
 
-	int traitorCount = GetRoleCount(TRAITOR);
-	int innoCount = GetRoleCount(INNOCENT);
+	int traitorCount = GetRoleCount(true);
+	int innoCount = GetRoleCount(false);
 
 	if (traitorCount == 0 && innoCount > 0)
 	{
 		CPrintToChatAll("%s Last traitor has disconnected, innocents won!", TAG);
-		ForceTeamWin();
+		ForceTeamWin(2);
 	}
 	else if (innoCount == 0 && traitorCount > 0)
 	{
 		CPrintToChatAll("%s Last innocent has disconnected, traitors won!", TAG);
-		ForceTeamWin();
+		ForceTeamWin(3);
 	}
 }
 
@@ -182,7 +237,7 @@ Action Listener_JoinTeam(int client, const char[] command, int args)
 	if (!IsValidClient(client))
 		return Plugin_Continue;
 
-	if (!roundStarted)
+	if (g_eRound != Round_Active) // it's ok to enter teams
 		return Plugin_Continue;
 	
 	CPrintToChat(client, "%s Please wait for the current round to end.", TAG);
@@ -194,7 +249,7 @@ Action Listener_JoinClass(int client, const char[] command, int args)
 	if (!IsValidClient(client))
 		return Plugin_Continue;
 
-	if (roundStarted)
+	if (g_eRound == Round_Active)
 	{
 		CPrintToChat(client, "%s You cannot change class during the round.", TAG);
 		return Plugin_Handled;
@@ -221,10 +276,63 @@ public Action Cmd_ReloadConfigs(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action Cmd_RoleShop(int client, int args)
+public Action Cmd_Shop(int client, int args)
 {
 	OpenShop(TTTPlayer(client));
 	return Plugin_Handled;
+}
+
+public Action Cmd_RoleList(int client, int args)
+{
+	Menu menu = new Menu(Handler_RoleList);
+	menu.SetTitle("[TTT] Meet The Roles:");
+	menu.AddItem("Innocent", "Innocent");
+	menu.AddItem("Detective", "Detective");
+	menu.AddItem("Traitor", "Traitor");
+	menu.AddItem("Disguiser", "Disguiser");
+	menu.AddItem("Necromancer", "Necromancer");
+	menu.AddItem("Pestilence", "Pestilence");
+	menu.AddItem("Thunder", "Thunder");
+	menu.Display(client, 30);
+	return Plugin_Handled;
+}
+
+public int Handler_RoleList(Menu menu, MenuAction action, int client, int param2) 
+{  
+	if(action == MenuAction_Select)
+	{
+		char info[32];
+		menu.GetItem(param2, info, sizeof(info));
+
+		if(StrEqual(info, "Innocent"))
+		{
+			TTTPlayer(client).ShowRoleMenu(INNOCENT);
+		}
+		else if(StrEqual(info, "Detective"))
+		{
+			TTTPlayer(client).ShowRoleMenu(DETECTIVE);
+		}
+		else if(StrEqual(info, "Traitor"))
+		{
+			TTTPlayer(client).ShowRoleMenu(TRAITOR);
+		}
+		else if(StrEqual(info, "Disguiser"))
+		{
+			TTTPlayer(client).ShowRoleMenu(DISGUISER);
+		}
+		else if(StrEqual(info, "Necromancer"))
+		{
+			TTTPlayer(client).ShowRoleMenu(NECROMANCER);
+		}
+		else if(StrEqual(info, "Pestilence"))
+		{
+			TTTPlayer(client).ShowRoleMenu(PESTILENCE);
+		}
+		else if(StrEqual(info, "Thunder"))
+		{
+			TTTPlayer(client).ShowRoleMenu(THUNDER);
+		}
+	}
 }
 
 /* Event Hooks
@@ -242,6 +350,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	{
 		if (IsValidClient(i))
 		{
+			g_fLastAbility[i] = 0.0;
 			TF2_ChangeClientTeam(i, TFTeam_Red);
 		}
 	}
@@ -252,14 +361,15 @@ public void OnSetupFinished(const char[] output, int caller, int activator, floa
 	StartTTT();
 }
 
-public Action Event_PlayerTeamPre(Event event, const char[] name, bool dontBroadcast)
+public Action Event_ToBlock(Event event, const char[] name, bool dontBroadcast)
 {
-	return Plugin_Handled;
+	event.BroadcastDisabled = true;
+	return Plugin_Continue;
 }
 
 public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroadcast)
 {
-	if (!roundStarted)
+	if (g_eRound != Round_Active)
 		return Plugin_Continue;
 	
 	int victim = GetClientOfUserId(event.GetInt("userid"));
@@ -270,23 +380,23 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 
 	TTTPlayer pVictim = TTTPlayer(victim);
 
-	int traitorCount = GetRoleCount(TRAITOR);
-	int innoCount = GetRoleCount(INNOCENT);
+	int traitorCount = GetRoleCount(true);
+	int innoCount = GetRoleCount(false);
 
 	if (pVictim.role == INNOCENT)
 		innoCount--;
-	else if (pVictim.role == TRAITOR)
+	else if (pVictim.role >= TRAITOR)
 		traitorCount--;
 
 	if (traitorCount == 0 && innoCount > 0)
 	{
 		CPrintToChatAll("%s All the traitors have died, and the innocents won!", TAG);
-		ForceTeamWin();
+		ForceTeamWin(2);
 	}
 	else if (innoCount == 0 && traitorCount > 0)
 	{
 		CPrintToChatAll("%s The innocents have died, and the traitors won!", TAG);
-		ForceTeamWin();
+		ForceTeamWin(3);
 	}
 
 	CreateTimer(0.0, CreateRagdoll, pVictim);
@@ -302,18 +412,20 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 	TTTPlayer pAttacker = TTTPlayer(attacker);
 	pAttacker.killCount++;
 
-	if(pAttacker.role == TRAITOR && pVictim.role != TRAITOR) // TRAITOR KILLS INNO/DET
-	{
-		pAttacker.credits += g_Cvar_KillInnoCredits.IntValue;
+	pVictim.killerRole = pAttacker.role;
 
-		if (pAttacker.killCount % 3 == 0)
+	if (pAttacker.role >= TRAITOR && pVictim.role < TRAITOR) // TRAITOR KILLS INNO/DET
+	{
+		pAttacker.credits += g_cvKillInnoCredits.IntValue;
+
+		if (pAttacker.role == TRAITOR && pAttacker.killCount % 3 == 0)
 		{
 			CPrintToChat(attacker, "%s You can now use the {fullred}INSTANT KILL{default} with your melee weapon!", TAG);
 		}
 	}
-	else if(pAttacker.role != TRAITOR && pVictim.role == TRAITOR) // INNO/DET KILLS TRAITOR
+	else if (pAttacker.role < TRAITOR && pVictim.role >= TRAITOR) // INNO/DET KILLS TRAITOR
 	{
-		pAttacker.credits += g_Cvar_KillTraitorCredits.IntValue;
+		pAttacker.credits += g_cvKillTraitorCredits.IntValue;
 		pAttacker.karma += 20;
 
 		if (pAttacker.karma > 110)
@@ -321,7 +433,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 			pAttacker.karma = 110;
 		}	
 	}
-	else if (pAttacker.role != TRAITOR && pVictim.role != TRAITOR) // INNO/DET KILLS INNO/DET
+	else if (pAttacker.role < TRAITOR && pVictim.role < TRAITOR) // INNO/DET KILLS INNO/DET
 	{
 		pAttacker.karma -= 10;
 
@@ -336,7 +448,7 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 
 public void OnRoundEnd(const char[] output, int caller, int activator, float delay)
 {
-	ForceTeamWin();
+	ForceTeamWin(2);
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -345,86 +457,118 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 	{
 		if (IsValidClient(i))
 		{
+			TTTPlayer player = TTTPlayer(i);
+			if (player.role >= TRAITOR)
+			{
+				CPrintToChatAll("%s {red}%N {default}(%s) has murdered {purple}%i{default} players.", TAG, i, g_sRoles[player.role], player.killCount);
+				SetEntProp(i, Prop_Send, "m_bGlowEnabled", 0);
+			}
+
+			SendProxy_Unhook(i, "m_bGlowEnabled", SendProxy_Glow);
 			SetClientListeningFlags(i, VOICE_NORMAL);
-			TTTPlayer(i).Reset();
+			player.Reset();
 		}
 	}
 
-	roundStarted = false;
+	g_eRound = Round_Ended;
 	FF(false);
 }
 
 public Action OnClientSayCommand(int client, const char[] command, const char[] message)
 {
-	if (!IsPlayerAlive(client) && !IsAdmin(client))
+	if (!IsPlayerAlive(client))
 	{
-		for (int i = 1; i <= MaxClients; i++)
+		if (TTTPlayer(client).role == NECROMANCER && StrEqual(message, "respawn", false))
 		{
-			if (IsValidClient(i) && !IsPlayerAlive(i))
+			float now = GetEngineTime();
+			if (g_fLastAbility[client] + g_cvRespawnDelay.IntValue - now > 0)
 			{
-				CPrintToChat(i, "*DEAD* {teamcolor}%N {default}: %s", client, message);
+				CPrintToChat(client, "%s Please wait %0.1f seconds before resurrecting members again.", TAG, g_cvRespawnDelay.IntValue - (now - g_fLastAbility[client]));
+				return Plugin_Handled;
 			}
+
+			PerformResurrect();
+			g_fLastAbility[client] = now;
+			return Plugin_Handled;
 		}
-		return Plugin_Handled;
+
+		if (!IsAdmin(client))
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsValidClient(i) && !IsPlayerAlive(i))
+				{
+					CPrintToChat(i, "*DEAD* {teamcolor}%N {default}: %s", client, message);
+				}
+			}
+
+			return Plugin_Handled;
+		}
 	}
-	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role == TRAITOR)
+	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role >= TRAITOR)
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsValidClient(i) && TTTPlayer(i).role == TRAITOR)
+			if (IsValidClient(i) && TTTPlayer(i).role >= TRAITOR)
 			{
 				CPrintToChat(i, "(TRAITOR) {red}%N {default}: %s", client, message);
 			}
 		}
+
 		return Plugin_Handled;
 	}
-	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role != TRAITOR)
+	else if (StrEqual(command, "say_team") && IsPlayerAlive(client) && TTTPlayer(client).role < TRAITOR)
 	{
 		return Plugin_Handled;
 	}
-	
+
 	return Plugin_Continue;
 }
 
 public Action Timer_Hud(Handle timer)
 {
 	Handle hHudRole = CreateHudSynchronizer();
-	SetHudTextParams(0.7, 0.6, 1.9, 255, 255, 255, 255);
+	SetHudTextParams(-1.0, 0.15, 1.9, 255, 255, 255, 255);
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsValidClient(i))
 		{
-			TTTPlayer player = TTTPlayer(i);
+			Role role = TTTPlayer(i).role;
 
-			if (!roundStarted)
+			if (g_eRound != Round_Active)
 			{
 				ShowSyncHudText(i, hHudRole, "Round pending");
 			}
-			else if (!IsPlayerAlive(i) && roundStarted)
+			else if (!IsPlayerAlive(i) && g_eRound == Round_Active)
 			{
 				ShowSyncHudText(i, hHudRole, "You are dead");
 			}
-			else if (player.role == TRAITOR)
+			else if (role >= TRAITOR)
 			{
-				char traitors[256];
-				for (int j = 1; j <= MaxClients; j++)
+				if (role == PESTILENCE)
 				{
-					if (IsValidClient(j) && TTTPlayer(j).role == TRAITOR && j != i)
+					if(IsValidClient(g_iLastTouched[i]))
 					{
-						Format(traitors, sizeof(traitors), "%s\n%N", traitors, j);
+						ShowSyncHudText(i, hHudRole, "PESTILENCE\nCurrent Victim: %N", g_iLastTouched[i]);
+					}
+					else 
+					{
+						ShowSyncHudText(i, hHudRole, "PESTILENCE");
 					}
 				}
-
-				ShowSyncHudText(i, hHudRole, "You are A TRAITOR\n%s%s", traitors[0] ? "Traitors Teammates:" : "", traitors);
+				else 
+				{
+					ShowSyncHudText(i, hHudRole, "TRAITOR");
+				}
 			}
-			else if (player.role == DETECTIVE)
+			else if (role == DETECTIVE)
 			{
-				ShowSyncHudText(i, hHudRole, "You are A DETECTIVE");
+				ShowSyncHudText(i, hHudRole, "DETECTIVE");
 			}
-			else if (player.role == INNOCENT)
+			else if (role == INNOCENT)
 			{
-				ShowSyncHudText(i, hHudRole, "You are an innocent");
+				ShowSyncHudText(i, hHudRole, "Innocent");
 			}
 		}
 	}
@@ -441,8 +585,10 @@ public void ThinkPost(int entity)
 	{
 		if (IsValidClient(i))
 		{
-			if(TF2_GetClientTeam(i) <= TFTeam_Spectator)
+			if (TF2_GetClientTeam(i) <= TFTeam_Spectator)
+			{
 				SetEntProp(entity, Prop_Send, "m_iTeam", 2, _, i);
+			}	
 
 			SetEntProp(entity, Prop_Send, "m_bAlive", true, _, i);
 			SetEntProp(entity, Prop_Send, "m_iTotalScore", 1, _, i);
@@ -452,7 +598,7 @@ public void ThinkPost(int entity)
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (roundStarted && IsValidClient(victim) && IsValidClient(attacker) && victim != attacker)
+	if (g_eRound == Round_Active && IsValidClient(victim) && IsValidClient(attacker) && victim != attacker)
 	{
 		TTTPlayer pAttacker = TTTPlayer(attacker);
 		TTTPlayer pVictim = TTTPlayer(victim);
@@ -490,6 +636,26 @@ public Action OnGetMaxHealth(int client, int &maxhealth)
 /* Functions
 ==================================================================================================== */
 
+void InsertServerTag(const char[] tagToInsert)
+{
+	ConVar tags = FindConVar("sv_tags");
+	char tagsText[256];
+	// Insert server tag at end
+	tags.GetString(tagsText, sizeof(tagsText));
+	if (StrContains(tagsText, tagToInsert, true) == -1)
+	{
+		Format(tagsText, sizeof(tagsText), "%s,%s", tagsText, tagToInsert);
+		tags.SetString(tagsText);
+		// If failed, insert server tag at start
+		tags.GetString(tagsText, sizeof(tagsText));
+		if (StrContains(tagsText, tagToInsert, true) == -1)
+		{
+			Format(tagsText, sizeof(tagsText), "%s,%s", tagToInsert, tagsText);
+			tags.SetString(tagsText);
+		}
+	}
+}
+
 public Action CreateRagdoll(Handle timer, const TTTPlayer player)
 {
 	SpawnRagdoll(player, "deadbody");
@@ -504,7 +670,7 @@ stock void SpawnRagdoll(const TTTPlayer player, const char[] name)
 		AcceptEntityInput(BodyRagdoll, "kill");
 	}
 
-	player.deathTime = GetGameTime();
+	player.deathTime = GetEngineTime();
 
 	int ent = CreateEntityByName("prop_ragdoll");
 	char m_ModelName[PLATFORM_MAX_PATH];
@@ -530,7 +696,7 @@ stock void SpawnRagdoll(const TTTPlayer player, const char[] name)
 	TeleportEntity(ent, fOrigin, fAngles, fVelocity);
 
 	char command[64];
-	FormatEx(command, sizeof(command), "OnUser1 !self:kill::%0.1f:1", g_Cvar_BodyFade.FloatValue);
+	FormatEx(command, sizeof(command), "OnUser1 !self:kill::%0.1f:1", g_cvBodyFade.FloatValue);
 	SetVariantString(command);
 	AcceptEntityInput(ent, "AddOutput");
 	AcceptEntityInput(ent, "FireUser1");
@@ -549,35 +715,83 @@ stock void SetAmmo(int client, int iWeapon, int iAmmo)
 	if (iAmmoType != -1) SetEntProp(client, Prop_Data, "m_iAmmo", iAmmo, _, iAmmoType);
 }
 
-stock int GetRoleCount(Role role, bool alive = true)
+stock int GetRoleCount(bool traitor=true)
 {
 	int count = 0;
-	for (int i = 1; i <= MaxClients; i++)
+	
+	if (traitor)
 	{
-		if (!IsValidClient(i))
-			continue;
-
-		if (TTTPlayer(i).role != role)
-			continue;
-
-		if (alive && !IsPlayerAlive(i))
-			continue;
-
-		count++;
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsValidClient(i) && IsPlayerAlive(i) && TTTPlayer(i).role >= TRAITOR)
+				count++;
+		}
 	}
+	else 
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsValidClient(i) && IsPlayerAlive(i) && TTTPlayer(i).role == INNOCENT)
+				count++;
+		}
+	}
+	
 	return count;
 }
 
-stock void FakeDeath(int client, TFTeam team)
+stock void Swap(int client, TFTeam team)
 {
-	int EntProp = GetEntProp(client, Prop_Send, "m_lifeState");
-	SetEntProp(client, Prop_Send, "m_lifeState", 2);
-	TF2_ChangeClientTeam(client, team);
-	SetEntProp(client, Prop_Send, "m_lifeState", EntProp);
+	if (IsPlayerAlive(client))
+	{
+		int EntProp = GetEntProp(client, Prop_Send, "m_lifeState");
+		SetEntProp(client, Prop_Send, "m_lifeState", 2);
+		TF2_ChangeClientTeam(client, team);
+		SetEntProp(client, Prop_Send, "m_lifeState", EntProp);
+	}
+	else 
+	{
+		TF2_ChangeClientTeam(client, team);
+		TF2_RespawnPlayer(client);
+	}
 }
 
-stock void ForceTeamWin()
+stock int TF2_SpawnHat(int client, int iIndex)
 {
+	int ent = CreateEntityByName("tf_wearable");
+	
+	if (IsValidEntity(ent))
+	{
+		SetEntProp(ent, Prop_Send, "m_iItemDefinitionIndex", iIndex);
+		SetEntProp(ent, Prop_Send, "m_bInitialized", true);
+		SetEntProp(ent, Prop_Send, "m_iEntityQuality", 0);
+		SetEntProp(ent, Prop_Send, "m_iEntityLevel", 1);
+
+		DispatchSpawn(ent);
+		SetEntProp(ent, Prop_Send, "m_bValidatedAttachedEntity", true);	
+		SDKCall(g_hSDKCallEquipWearable, client, ent);
+	}
+	
+	return ent;
+}
+
+stock void ForceTeamWin(int team)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsValidClient(i))
+		{
+			TTTPlayer player = TTTPlayer(i);
+			if (player.role >= TRAITOR)
+			{
+				Swap(i, TFTeam_Blue);
+			}
+			else
+			{
+				Swap(i, TFTeam_Red);
+			}
+		}
+	}
+
 	int entity = FindEntityByClassname(MaxClients + 1, "team_control_point_master");
 	
 	if (entity == -1)
@@ -587,11 +801,9 @@ stock void ForceTeamWin()
 		AcceptEntityInput(entity, "Enable");
 	}
 	
-	SetVariantInt(2);
+	SetVariantInt(team);
 	AcceptEntityInput(entity, "SetWinner");
 }
-
-public int RoleMenu(Menu menu, MenuAction action, int param1, int param2) {  }
 
 /* Debug output
 ==================================================================================================== */

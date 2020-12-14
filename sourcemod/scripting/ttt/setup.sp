@@ -44,11 +44,11 @@ stock void MakeRoundTimer()
 	int iTimer = CreateEntityByName("team_round_timer");
 	char time[8];
 	DispatchKeyValue(iTimer, "show_in_hud", "1");
-	FormatEx(time, sizeof(time), "%i", g_Cvar_SetupTime.IntValue);
+	FormatEx(time, sizeof(time), "%i", g_cvSetupTime.IntValue);
 	DispatchKeyValue(iTimer, "setup_length", time);
 	DispatchKeyValue(iTimer, "reset_time", "1");
 	DispatchKeyValue(iTimer, "auto_countdown", "1");
-	FormatEx(time, sizeof(time), "%i", g_Cvar_RoundTime.IntValue);
+	FormatEx(time, sizeof(time), "%i", g_cvRoundTime.IntValue);
 	DispatchKeyValue(iTimer, "timer_length", time);
 	DispatchSpawn(iTimer);
 
@@ -60,13 +60,15 @@ stock void MakeRoundTimer()
 
 	Event event = CreateEvent("teamplay_update_timer", true);
 	event.Fire();
+
+	g_eRound = Round_Setup;
 }
 
 stock void StartTTT()
 {
-	if(GetClientCount() == 0)
+	if (GetClientCount() == 0)
 	{
-		ForceTeamWin();
+		ForceTeamWin(2);
 		return;
 	}
 
@@ -87,7 +89,36 @@ stock void StartTTT()
 				player.role = INNOCENT;
 			}
 
+			if (player.role > INNOCENT && requiredClass[player.role - DETECTIVE] != TFClass_Unknown)
+			{
+				TF2_SetPlayerClass(i, requiredClass[player.role - DETECTIVE]);
+			}
+
+			if (player.role >= TRAITOR)
+			{
+				SetEntProp(i, Prop_Send, "m_bGlowEnabled", 1);
+			}
+
+			SendProxy_Hook(i, "m_bGlowEnabled", Prop_Int, SendProxy_Glow);
 			player.Setup();
+		}
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsValidClient(i) && TTTPlayer(i).role >= TRAITOR)
+		{
+			for (int j = 1; j <= MaxClients; j++)
+			{
+				if (IsValidClient(j))
+				{
+					Role role = TTTPlayer(j).role;
+					if(role >= TRAITOR)
+					{
+						CPrintToChat(i, "%N - %s.", j, g_sRoles[role]);
+					}
+				}
+			}
 		}
 	}
 
@@ -136,13 +167,13 @@ stock void StartTTT()
 		AcceptEntityInput(ent, "SetRedTeamRespawnWaveTime");
 	}*/
 
-	roundStarted = true;
+	g_eRound = Round_Active;
 	FF(true);
 }
 
 stock void AssignTraitors()
 {
-	int required = GetClientCount() / g_Cvar_TraitorRatio.IntValue;
+	int required = GetClientCount() / g_cvTraitorRatio.IntValue;
 
 	while (required > 0)
 	{
@@ -150,14 +181,17 @@ stock void AssignTraitors()
 
 		if (g_aForceTraitor.Length > 0)
 		{
-			random = GetClientOfUserId(g_aForceTraitor.Get(0));
+			int arr[2];
+			g_aForceTraitor.GetArray(0, arr);
+			random = GetClientOfUserId(arr[0]);
 
 			if (IsValidClient(random))
 			{
+				Role role = view_as<Role>(arr[1]);
 				TTTPlayer player = TTTPlayer(random);
-				player.role = TRAITOR;
+				player.role = role;
 				player.credits += 2;
-				CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
+				CPrintToChat(random, "%s {community}You are the %s.", TAG, g_sRoles[role]);
 				CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 				required--;
 			}
@@ -171,9 +205,18 @@ stock void AssignTraitors()
 		if (random != -1)
 		{
 			TTTPlayer player = TTTPlayer(random);
-			player.role = TRAITOR;
-			player.credits += 2;
-			CPrintToChat(random, "%s {community}You are a %s.", TAG, g_sRoles[TRAITOR]);
+			
+			if (GetRandomInt(1, 100) <= 80)
+			{
+				player.role = TRAITOR;
+			}
+			else 
+			{
+				player.role = view_as<Role>(GetRandomInt(view_as<int>(DISGUISER), view_as<int>(THUNDER)));
+			}
+			
+			player.credits += g_cvCreditsOnRound.IntValue;
+			CPrintToChat(random, "%s {community}You are the %s.", TAG, g_sRoles[player.role]);
 			CPrintToChat(random, "%s {fullred}You can use teamchat to communicate with your fellow Traitors.", TAG);
 		}
 
@@ -183,7 +226,7 @@ stock void AssignTraitors()
 
 stock void AssignDetectives()
 {
-	int required = GetClientCount() / g_Cvar_DetectiveRatio.IntValue;
+	int required = GetClientCount() / g_cvDetectiveRatio.IntValue;
 
 	while (required > 0)
 	{
@@ -220,17 +263,62 @@ stock void AssignDetectives()
 	}
 }
 
-stock int GetRandomPlayer()  
-{  
+stock int GetRandomPlayer(Role role = NOROLE, bool deadOnly = false)
+{
 	int[] clients = new int[MaxClients];
-	int clientCount;
-	for (int i = MaxClients; i; --i)  
+	int clientCount = 0;
+
+	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsValidClient(i) && TTTPlayer(i).role == NOROLE)
+		if (!IsValidClient(i))
 		{
-			clients[clientCount++] = i;
+			continue;
 		}
-			
+
+		if (deadOnly && IsPlayerAlive(i))
+		{
+			continue;
+		}
+
+		if (role == TRAITOR)
+		{
+			if (TTTPlayer(i).role < TRAITOR)
+			{
+				continue;
+			}
+		}
+		else if (TTTPlayer(i).role != role)
+		{
+			continue;
+		}
+
+		clients[clientCount++] = i;
 	}
-	return (clientCount == 0) ? -1 : clients[GetRandomInt(0, clientCount - 1)];  
+
+	if (clientCount == 0)
+	{
+		return -1;
+	}
+
+	SortIntegers(clients, clientCount - 1, Sort_Random);
+	return clients[GetRandomInt(0, clientCount - 1)];
+}
+
+public Action SendProxy_Glow(const int iEntity, const char[] cPropName, int &iValue, const int iElement, const int iClient)
+{
+	Role entRole = TTTPlayer(iEntity).role;
+	Role clientRole = TTTPlayer(iClient).role;
+	
+	if (entRole >= TRAITOR && clientRole >= TRAITOR)
+	{
+		iValue = 1;
+		return Plugin_Changed;
+	}
+	if (entRole >= TRAITOR && clientRole < TRAITOR)
+	{
+		iValue = 0;
+		return Plugin_Changed;
+	}
+
+	return Plugin_Continue;
 }

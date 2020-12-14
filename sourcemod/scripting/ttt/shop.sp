@@ -1,5 +1,7 @@
 #define MAX_TRAITOR_ITEMS 8
-#define MAX_ROLES 2
+#define MAX_ROLES 6
+
+TFClassType requiredClass[MAX_ROLES] = { TFClass_Unknown, TFClass_Unknown, TFClass_Unknown, TFClass_Unknown};
 
 enum struct MenuItem
 {
@@ -74,7 +76,7 @@ public void OpenShop(const TTTPlayer player)
 {
 	if (player.role == TRAITOR)
 	{
-		Menu menu = new Menu(Handler_Traitor);
+		Menu menu = new Menu(Handler_TraitorShop);
 		menu.SetTitle("Shop Menu\nYou have %i credits", player.credits);
 		for (int i = 0; i < MAX_TRAITOR_ITEMS; i++)
 		{
@@ -86,7 +88,7 @@ public void OpenShop(const TTTPlayer player)
 	}
 	else if (player.role == NOROLE)
 	{
-		Menu menu = new Menu(Handler_Roles);
+		Menu menu = new Menu(Handler_RoleShop);
 		menu.SetTitle("Buy Role\nYou have %i credits", player.credits);
 		for (int i = 0; i < MAX_ROLES; i++)
 		{
@@ -98,7 +100,7 @@ public void OpenShop(const TTTPlayer player)
 	}
 }
 
-public int Handler_Traitor(Menu smenu, MenuAction action, int client, int param2) 
+public int Handler_TraitorShop(Menu smenu, MenuAction action, int client, int param2) 
 {  
 	switch (action)
 	{
@@ -160,7 +162,7 @@ public int Handler_Traitor(Menu smenu, MenuAction action, int client, int param2
 	}
 }
 
-public int Handler_Roles(Menu smenu, MenuAction action, int client, int param2)
+public int Handler_RoleShop(Menu smenu, MenuAction action, int client, int param2)
 {  
 	switch (action)
 	{
@@ -179,6 +181,12 @@ public int Handler_Roles(Menu smenu, MenuAction action, int client, int param2)
 				return;
 			}
 
+			if (g_aForceTraitor.FindValue(GetClientUserId(client)) != -1)
+			{
+				CPrintToChat(client, "%s You have already purchased for a role.", TAG);
+				return;
+			}
+
 			if (player.role != NOROLE)
 			{
 				CPrintToChat(client, "%s You can only purchase this during setup time.", TAG);
@@ -187,7 +195,38 @@ public int Handler_Roles(Menu smenu, MenuAction action, int client, int param2)
 
 			if (StrEqual(strings[0], "traitor"))
 			{
-				g_aForceTraitor.Push(GetClientUserId(client));
+				int arr[2];
+				arr[0] = GetClientUserId(client);
+				arr[1] = view_as<int>(TRAITOR);
+				g_aForceTraitor.PushArray(arr);
+			}
+			else if (StrEqual(strings[0], "disguiser"))
+			{
+				int arr[2];
+				arr[0] = GetClientUserId(client);
+				arr[1] = view_as<int>(DISGUISER);
+				g_aForceTraitor.PushArray(arr);
+			}
+			else if (StrEqual(strings[0], "necromancer"))
+			{
+				int arr[2];
+				arr[0] = GetClientUserId(client);
+				arr[1] = view_as<int>(NECROMANCER);
+				g_aForceTraitor.PushArray(arr);
+			}
+			else if (StrEqual(strings[0], "pestilence"))
+			{
+				int arr[2];
+				arr[0] = GetClientUserId(client);
+				arr[1] = view_as<int>(PESTILENCE);
+				g_aForceTraitor.PushArray(arr);
+			}
+			else if (StrEqual(strings[0], "thunder"))
+			{
+				int arr[2];
+				arr[0] = GetClientUserId(client);
+				arr[1] = view_as<int>(THUNDER);
+				g_aForceTraitor.PushArray(arr);
 			}
 			else if (StrEqual(strings[0], "detective"))
 			{
