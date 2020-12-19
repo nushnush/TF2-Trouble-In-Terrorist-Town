@@ -1,3 +1,5 @@
+![GitHub all releases](https://img.shields.io/github/downloads/nushnush/TF2-Trouble-In-Terrorist-Town/total?style=flat-square) ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/nushnush/TF2-Trouble-In-Terrorist-Town?style=flat-square) ![GitHub issues](https://img.shields.io/github/issues/nushnush/TF2-Trouble-In-Terrorist-Town?style=flat-square) ![GitHub closed issues](https://img.shields.io/github/issues-closed/nushnush/TF2-Trouble-In-Terrorist-Town?style=flat-square)
+
 # TF2 Trouble-In-Terrorist-Town
 The Original Trouble in Terrorist Town (TTT) was made in Garry's Mod. The game is about a group of terrorists who have Traitors among them, out to kill every other 'Innocent' terrorist.
 
