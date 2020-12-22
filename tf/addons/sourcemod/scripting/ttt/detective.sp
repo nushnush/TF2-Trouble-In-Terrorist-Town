@@ -65,23 +65,18 @@ void Detective_Transform(const TTTPlayer player)
 
 void Fade()
 {
-	for (int i = 1; i <= MaxClients; i++)
+	Handle hBf = StartMessageAll("Fade");
+
+	if (hBf != INVALID_HANDLE)
 	{
-		if (IsValidClient(i))
-		{
-			Handle hBf = StartMessageOne("Fade", i);
-			if (hBf != INVALID_HANDLE)
-			{
-				BfWriteShort(hBf, 500); //actual duration of fade
-				BfWriteShort(hBf, TRANSFORM_TIME * 500); //Holdtime
-				BfWriteShort(hBf, 0x0001);
-				BfWriteByte(hBf, 250);
-				BfWriteByte(hBf, 250);
-				BfWriteByte(hBf, 250);
-				BfWriteByte(hBf, 255);
-				EndMessage();
-			}
-		}
+		BfWriteShort(hBf, 500); //actual duration of fade
+		BfWriteShort(hBf, TRANSFORM_TIME * 500); //Holdtime
+		BfWriteShort(hBf, 0x0001);
+		BfWriteByte(hBf, 250);
+		BfWriteByte(hBf, 250);
+		BfWriteByte(hBf, 250);
+		BfWriteByte(hBf, 255);
+		EndMessage();
 	}
 }
 

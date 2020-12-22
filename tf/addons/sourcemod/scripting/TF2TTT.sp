@@ -68,6 +68,7 @@ enum RoundStatus
 TextNodeParam huds[2];
 RoundStatus g_eRound;
 
+ConVar g_cvEnabled;
 ConVar g_cvSetupTime;
 ConVar g_cvRoundTime;
 ConVar g_cvTraitorRatio;
@@ -107,7 +108,7 @@ public Plugin myinfo =
 	name = "[TF2] Trouble In Terrorist Town", 
 	author = "yelks", 
 	description = "GMOD:TTT/CSGO:TTT Mod made for tf2", 
-	version = "0.4.1 Beta", 
+	version = "0.4.1.1 Beta", 
 	url = "http://www.yelksdev.xyz/"
 };
 
@@ -139,6 +140,10 @@ public void OnPluginStart()
 		
 	delete hTF2;
 	
+	g_cvEnabled = CreateConVar("ttt_enabled", "1", "Is TTT enabled? 1 - yes, 0 - no", _, true, 0.0, true, 1.0);
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	g_cvSetupTime = CreateConVar("ttt_setup_time", "30", "Time in seconds to prepare before the ttt starts.", _, true, 5.0);
 	g_cvRoundTime = CreateConVar("ttt_round_time", "240", "Round duration in seconds", _, true, 10.0, true, 900.0);
 	g_cvTraitorRatio = CreateConVar("ttt_traitor_ratio", "3", "1 Traitor out of every X players in the server", _, true, 2.0);
@@ -187,6 +192,9 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	InsertServerTag("ttt");
 
 	FindConVar("mp_autoteambalance").SetInt(0);
@@ -197,6 +205,9 @@ public void OnConfigsExecuted()
 
 public void OnMapStart()
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	SDKHook(FindEntityByClassname(MaxClients + 1, "tf_player_manager"), SDKHook_ThinkPost, PlayerManagerThink);
 
 	Necromancer_OnMapStart();
@@ -259,6 +270,9 @@ public Action Timer_Hud(Handle timer)
 
 public void OnEntityCreated(int entity, const char[] classname)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	if (StrEqual(classname, "tf_logic_arena") 
 	|| StrEqual(classname, "tf_logic_koth")
 	|| StrEqual(classname, "tf_dropped_weapon")
@@ -272,6 +286,9 @@ public void OnEntityCreated(int entity, const char[] classname)
 
 public void OnClientPutInServer(int client)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	delete hMap[client];
 	hMap[client] = new StringMap();
 
@@ -285,12 +302,15 @@ public void OnClientPutInServer(int client)
 
 public void OnClientDisconnect(int client)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	SendProxy_Unhook(client, "m_bGlowEnabled", SendProxy_Glow);
 }
 
 public void OnClientDisconnect_Post(int client)
 {
-	if (g_eRound != Round_Active)
+	if (!g_cvEnabled.BoolValue || g_eRound != Round_Active)
 		return;
 
 	int traitorCount = GetRoleCount(true);
@@ -310,6 +330,9 @@ public void OnClientDisconnect_Post(int client)
 
 public void TF2_OnConditionAdded(int client, TFCond condition)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	if (condition == TFCond_Zoomed)
 	{
 		SetEntPropFloat(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), Prop_Send, "m_flChargedDamage", 150.0);
@@ -432,7 +455,7 @@ public int Handler_RoleList(Menu menu, MenuAction action, int client, int param2
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	if (GameRules_GetProp("m_bInWaitingForPlayers") || GetClientCount() < 2) 
+	if (!g_cvEnabled.BoolValue || GameRules_GetProp("m_bInWaitingForPlayers") || GetClientCount() < 2) 
 		return;
 
 	OpenDoors();
@@ -451,11 +474,17 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 public void OnSetupFinished(const char[] output, int caller, int activator, float delay)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	StartTTT();
 }
 
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	int client = GetClientOfUserId(event.GetInt("userid"));
 
 	if(!IsValidClient(client))
@@ -471,7 +500,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 
 public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroadcast)
 {
-	if (g_eRound != Round_Active)
+	if (!g_cvEnabled.BoolValue || g_eRound != Round_Active)
 		return Plugin_Continue;
 	
 	int victim = GetClientOfUserId(event.GetInt("userid"));
@@ -550,12 +579,18 @@ public Action Event_PlayerDeathPre(Event event, const char[] name, bool dontBroa
 
 public void OnRoundEnd(const char[] output, int caller, int activator, float delay)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	CPrintToChatAll("%s The innocents remained alive, they win!", TAG);
 	ForceTeamWin(2);
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsValidClient(i))
@@ -579,6 +614,9 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 public Action OnClientSayCommand(int client, const char[] command, const char[] message)
 {
+	if (!g_cvEnabled.BoolValue)
+		return Plugin_Continue;
+
 	if (!IsPlayerAlive(client))
 	{
 		if (TTTPlayer(client).role == NECROMANCER && StrEqual(message, "respawn", false))
@@ -633,6 +671,9 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 
 public void PlayerManagerThink(int entity)
 {
+	if (!g_cvEnabled.BoolValue)
+		return;
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsValidClient(i))
@@ -650,6 +691,9 @@ public void PlayerManagerThink(int entity)
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
+	if (!g_cvEnabled.BoolValue)
+		return Plugin_Continue;
+
 	if (g_eRound == Round_Active && IsValidClient(victim) && IsValidClient(attacker) && victim != attacker)
 	{
 		TTTPlayer pAttacker = TTTPlayer(attacker);
@@ -678,7 +722,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 public Action OnGetMaxHealth(int client, int &maxhealth)
 {
-	if (!IsValidClient(client)) 
+	if (!g_cvEnabled.BoolValue || !IsValidClient(client)) 
 		return Plugin_Continue;
 
 	maxhealth = 200;

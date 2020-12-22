@@ -316,6 +316,9 @@ int GetRandomPlayer(Role role = NOROLE, bool deadOnly = false)
 
 public Action SendProxy_Glow(const int iEntity, const char[] cPropName, int &iValue, const int iElement, const int iClient)
 {
+	if (!g_cvEnabled.BoolValue)
+		return Plugin_Continue;
+		
 	Role entRole = TTTPlayer(iEntity).role;
 	Role clientRole = TTTPlayer(iClient).role;
 	

@@ -3,7 +3,7 @@ static int g_LastButtons[MAXPLAYERS + 1];
 
 public Action OnPlayerRunCmd(int client, int &buttons)
 {
-	if (!IsValidClient(client))
+	if (!g_cvEnabled.BoolValue || !IsValidClient(client))
 		return Plugin_Continue;
 		
 	for (int i = 0; i < MAX_BUTTONS; i++)
